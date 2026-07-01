@@ -78,7 +78,7 @@ For quick, small tasks use **rpi-agent** which handles the full cycle autonomous
 ### When reviewing
 - Use `/task-review` or the **code-review** agent to validate changes
 - Apply perspectives: `functional` (logic), `security` (credentials/data), `standards` (conventions)
-- Use **security-reviewer** for OWASP assessment on scripts handling credentials or sensitive data
+- Use **security-reviewer** for OWASP assessment on documentation handling credentials or sensitive data
 
 ### When writing documentation
 - Use the **documentation** agent for auditing and authoring
@@ -91,7 +91,7 @@ For quick, small tasks use **rpi-agent** which handles the full cycle autonomous
 
 ## Security Practices
 
-- Use **security-reviewer** (`/security-review`) before merging scripts that handle credentials, storage connections, or assessment data
+- Use **security-reviewer** (`/security-review`) before merging changes that handle credentials, storage connections, or assessment data
 - Use **security-planner** for STRIDE threat modeling on new agent designs
 - Assessment data may contain sensitive infrastructure details — handle accordingly
 

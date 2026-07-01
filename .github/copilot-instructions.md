@@ -133,7 +133,7 @@ Structure all documentation as:
 
 Types: feat, fix, docs, style, refactor, test, chore
 Examples:
-- feat: Add assessment data export script
+- feat: Add assessment data processing guide
 - docs: Update migration workflow guide
 - fix: Handle missing fields in inventory export
 ```
