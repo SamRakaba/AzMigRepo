@@ -1,0 +1,31 @@
+# HVE Core tracking artifacts (agent outputs — do not commit)
+.copilot-tracking/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+
+# PowerShell
+*.ps1xml
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Environment
+.env
+.env.local
+
+# Excel temp files
+~$*.xlsx

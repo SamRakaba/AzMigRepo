@@ -135,5 +135,34 @@ Before writing final implementation steps, ask for:
 4. Storage choice for exports (Azure Blob / SharePoint)
 5. Authentication model (managed identity / service principal / user)
 
+## 10) HVE Core integration
+
+This project uses the **Hypervelocity Engineering (HVE) Core** framework from [microsoft/hve-core](https://github.com/microsoft/hve-core) for structured AI-assisted development.
+
+### 10.1 RPI workflow
+Use the Research → Plan → Implement → Review methodology for all non-trivial tasks:
+- `/task-research <topic>` before implementing new features
+- `/task-plan` to create actionable implementation plans
+- `/task-implement` to execute plans with change tracking
+- `/task-review` to validate against specs
+
+### 10.2 Tracking artifacts
+All HVE Core agent outputs go to `.copilot-tracking/` which is gitignored. Never commit tracking artifacts.
+
+### 10.3 Security reviews
+Use **security-reviewer** agent or `/security-review` prompt for OWASP assessments on:
+- PowerShell scripts handling Hyper-V credentials
+- Python scripts processing Azure Migrate data
+- Power Automate flows with storage connectors
+
+### 10.4 Code review
+Use the **code-review** agent with perspectives relevant to this project:
+- `functional` — verify migration logic correctness
+- `security` — credential handling, data protection
+- `standards` — coding conventions per section 4
+
+### 10.5 Documentation
+Use the **documentation** agent for doc drift detection and authoring. Use **prd-builder** or **brd-builder** for formal requirements documents.
+
 ---
 End of repo instructions.
