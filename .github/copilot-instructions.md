@@ -2,19 +2,20 @@
 
 Effective date: 2026-06-30
 Repo: SamRakaba/AzMigRepo
-Primary focus: Azure Migrate workflows with HVE Core (Hypervelocity Engineering) agents
+Primary focus: Azure Migrate assessment data processing and Copilot Studio agents
 Parent project: [SamRakaba/AZMrepo](https://github.com/SamRakaba/AZMrepo)
+Dev methodology: [HVE Core](https://github.com/microsoft/hve-core) — Research → Plan → Implement → Review
 
 ## 1) Role
 
 You are GitHub Copilot working inside this repository. Your job is to help build, edit, and improve:
 
-- **Azure Migrate workflows** using HVE Core agents and skills
-- **Documentation** that is accurate, step-by-step, and actionable
-- **Scripts and automation** for Azure Migrate data processing
+- **Azure Migrate data processing** — CSV exports, inventory consolidation, assessment reports
 - **Copilot Studio agent definitions** with Power Automate tool integrations
+- **Scripts and automation** for migration data workflows
+- **Documentation** that is accurate, step-by-step, and actionable
 
-You are an **architect + implementation designer** leveraging the HVE Core framework for structured AI-assisted development.
+Follow the HVE Core RPI methodology: research before planning, plan before implementing, review after implementing. Use `/task-research`, `/task-plan`, `/task-implement`, `/task-review` for non-trivial work.
 
 ## 2) Non-negotiable accuracy rules
 
@@ -92,31 +93,22 @@ Examples:
 - fix: Handle missing fields in inventory export
 ```
 
-## 9) HVE Core integration
+## 9) Development methodology — HVE Core
 
-This project uses the **Hypervelocity Engineering (HVE) Core** framework from [microsoft/hve-core](https://github.com/microsoft/hve-core) for structured AI-assisted development.
+This project uses the [HVE Core](https://github.com/microsoft/hve-core) RPI workflow as its development methodology. HVE Core is a tooling/methodology layer — it is not part of the project itself.
 
-### 9.1 RPI workflow
-Use the Research → Plan → Implement → Review methodology for all non-trivial tasks:
-- `/task-research <topic>` before implementing new features
-- `/task-plan` to create actionable implementation plans
-- `/task-implement` to execute plans with change tracking
-- `/task-review` to validate against specs
+### How to use it
+- `/task-research <topic>` — Research before implementing new features
+- `/task-plan` — Create actionable implementation plans from research
+- `/task-implement` — Execute plans with change tracking
+- `/task-review` — Validate implementations against specs
+- `/security-review` — Run OWASP assessment on scripts handling credentials or data
+- `/git-commit` — Create Conventional Commit messages
+- **code-review** agent — Multi-perspective review (functional, security, standards)
+- **documentation** agent — Doc audit, drift detection, authoring
 
-### 9.2 Tracking artifacts
+### Tracking
 All HVE Core agent outputs go to `.copilot-tracking/` which is gitignored. Never commit tracking artifacts.
-
-### 9.3 Security reviews
-Use **security-reviewer** agent or `/security-review` prompt for OWASP assessments on scripts and automation code.
-
-### 9.4 Code review
-Use the **code-review** agent with perspectives relevant to this project:
-- `functional` — verify logic correctness
-- `security` — credential handling, data protection
-- `standards` — coding conventions per section 4
-
-### 9.5 Documentation
-Use the **documentation** agent for doc drift detection and authoring. Use **prd-builder** or **brd-builder** for formal requirements documents.
 
 ---
 End of repo instructions.

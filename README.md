@@ -1,48 +1,47 @@
-# AzMigRepo — Azure Migrate Agents with HVE Core
+# AzMigRepo — Azure Migrate Agents
 
-Copilot-powered project for Azure Migrate workflows, leveraging the [HVE Core (Hypervelocity Engineering)](https://github.com/microsoft/hve-core) framework for structured AI-assisted development.
+Tools and documentation for building Microsoft Copilot Studio agents focused on Azure Migrate workflows — assessment data processing, inventory consolidation, and migration reporting.
 
 ## Overview
 
-This repository provides tools, documentation, and agent definitions for managing **Azure Migrate** workflows using GitHub Copilot and Microsoft Copilot Studio. It leverages the HVE Core framework for repeatable, standards-aligned AI workflows including research, planning, implementation, code review, and security assessment.
+This repository provides documentation, scripts, and agent definitions for managing **Azure Migrate** tasks using Microsoft Copilot Studio and Power Automate. It builds on the patterns from the [AZMrepo](https://github.com/SamRakaba/AZMrepo) project.
 
-## Key Capabilities
+Development in this repo follows the [HVE Core](https://github.com/microsoft/hve-core) methodology (Research → Plan → Implement → Review) for structured, repeatable AI-assisted workflows.
 
-| Capability | Description |
-|-----------|-------------|
-| **RPI Workflow** | Research → Plan → Implement → Review methodology for all tasks |
-| **Security Assessment** | OWASP vulnerability scanning via security-reviewer agent |
-| **Code Review** | Multi-perspective code review with human-gated orchestration |
-| **Documentation** | Automated doc audit, drift detection, and authoring |
-| **Architecture** | ADR creation, system architecture review |
-| **Data Analysis** | Jupyter notebooks and Streamlit dashboards from data sources |
-| **Backlog Management** | GitHub, Jira, and Azure DevOps integration |
+## Project Scope
+
+- **CSV Processing**: Process and consolidate Azure Migrate export files
+- **Application Inventory**: Consolidate application inventories with duplicate removal
+- **SQL Server Assessment**: Process SQL Server inventory for migration assessment
+- **Database Consolidation**: Aggregate database inventory across environments
+- **Automated Reporting**: Generate Excel reports from assessment data
+- **Copilot Studio Agents**: Agent definitions with Power Automate tool integrations
 
 ## Project Structure
 
 ```
 AzMigRepo/
 ├── .github/
-│   └── copilot-instructions.md   # Copilot project instructions
-├── AGENTS.md                      # Agent definitions and skills (HVE Core)
+│   └── copilot-instructions.md   # Copilot project conventions
+├── AGENTS.md                      # Development guide (HVE Core methodology)
 ├── README.md                      # This file
 ├── .gitignore                     # Excludes .copilot-tracking/ and temps
 └── docs/                          # Guides and references
 ```
 
-## Quick Start
+## Getting Started
 
-1. **Clone the repo**: `git clone https://github.com/SamRakaba/AzMigRepo.git`
-2. **Install HVE Core**: Via [VS Code extension](https://marketplace.visualstudio.com/items?itemName=ise-hve-essentials.hve-core) or CLI (`copilot plugin marketplace add microsoft/hve-core`)
-3. **Review agents**: See [AGENTS.md](AGENTS.md) for available agents, skills, and prompts
-4. **Start working**: Use `/task-research <topic>` to begin the RPI workflow
+1. **Clone**: `git clone https://github.com/SamRakaba/AzMigRepo.git`
+2. **Install HVE Core** (dev tooling): [VS Code extension](https://marketplace.visualstudio.com/items?itemName=ise-hve-essentials.hve-core) or `copilot plugin marketplace add microsoft/hve-core`
+3. **Read AGENTS.md**: Development methodology and how Copilot should work here
+4. **Start**: Use `/task-research <topic>` to research before building
 
 ## Resources
 
-- [HVE Core — microsoft/hve-core](https://github.com/microsoft/hve-core)
+- [AZMrepo — Parent project](https://github.com/SamRakaba/AZMrepo)
 - [Azure Migrate Documentation](https://learn.microsoft.com/en-us/azure/migrate/)
-- [AZMrepo — Source project](https://github.com/SamRakaba/AZMrepo)
 - [Microsoft Copilot Studio](https://learn.microsoft.com/en-us/microsoft-copilot-studio/)
+- [HVE Core — Dev methodology](https://github.com/microsoft/hve-core)
 
 ## License
 
