@@ -1,22 +1,22 @@
-# AzMigRepo — Azure Migrate Hyper-V Environment (HVE) Agents
+# AzMigRepo — Azure Migrate Agents with HVE Core
 
-Copilot-powered agents for Azure Migrate Hyper-V discovery, assessment, and migration planning.
+Copilot-powered project for Azure Migrate workflows, leveraging the [HVE Core (Hypervelocity Engineering)](https://github.com/microsoft/hve-core) framework for structured AI-assisted development.
 
 ## Overview
 
-This repository provides tools, documentation, and agent definitions for managing **Azure Migrate Hyper-V Environment (HVE)** workflows using GitHub Copilot and Microsoft Copilot Studio. It builds on the patterns from the [AZMrepo](https://github.com/SamRakaba/AZMrepo) project, extending them to Hyper-V host discovery, VM inventory collection, and migration readiness assessment.
+This repository provides tools, documentation, and agent definitions for managing **Azure Migrate** workflows using GitHub Copilot and Microsoft Copilot Studio. It leverages the HVE Core framework for repeatable, standards-aligned AI workflows including research, planning, implementation, code review, and security assessment.
 
 ## Key Capabilities
 
 | Capability | Description |
 |-----------|-------------|
-| **HVE Discovery** | Discover Hyper-V hosts, clusters, and guest VMs across environments |
-| **VM Inventory** | Collect and consolidate VM metadata (CPU, memory, disk, network) |
-| **Readiness Assessment** | Evaluate migration readiness for Azure targets (Azure VM, AVS, AKS) |
-| **Dependency Mapping** | Map application dependencies across Hyper-V workloads |
-| **CSV Processing** | Process Azure Migrate export files for Hyper-V assessments |
-| **Report Generation** | Generate Excel reports with migration recommendations |
-| **Cost Estimation** | Estimate Azure costs for migrated Hyper-V workloads |
+| **RPI Workflow** | Research → Plan → Implement → Review methodology for all tasks |
+| **Security Assessment** | OWASP vulnerability scanning via security-reviewer agent |
+| **Code Review** | Multi-perspective code review with human-gated orchestration |
+| **Documentation** | Automated doc audit, drift detection, and authoring |
+| **Architecture** | ADR creation, system architecture review |
+| **Data Analysis** | Jupyter notebooks and Streamlit dashboards from data sources |
+| **Backlog Management** | GitHub, Jira, and Azure DevOps integration |
 
 ## Project Structure
 
@@ -24,56 +24,23 @@ This repository provides tools, documentation, and agent definitions for managin
 AzMigRepo/
 ├── .github/
 │   └── copilot-instructions.md   # Copilot project instructions
-├── AGENTS.md                      # HVE agent definitions and skills
+├── AGENTS.md                      # Agent definitions and skills (HVE Core)
 ├── README.md                      # This file
-├── docs/                          # Guides and references
-│   ├── hve-discovery-guide.md     # Hyper-V discovery walkthrough
-│   ├── assessment-patterns.md     # Assessment and readiness patterns
-│   └── migration-playbook.md      # End-to-end migration playbook
-├── scripts/                       # Automation scripts
-│   ├── discover_hyperv_hosts.ps1  # PowerShell: discover Hyper-V hosts
-│   ├── collect_vm_inventory.ps1   # PowerShell: collect VM inventory
-│   ├── export_assessment.py       # Python: export assessment data
-│   └── generate_report.py         # Python: generate migration report
-├── agents/                        # Agent configuration files
-│   ├── hve_discovery_agent.json   # HVE Discovery agent definition
-│   ├── assessment_agent.json      # Assessment agent definition
-│   └── migration_planner.json     # Migration planner agent definition
-├── templates/                     # Report and spreadsheet templates
-│   └── hve_assessment_template.xlsx
-└── tests/                         # Test files
-    ├── test_discovery.py
-    └── test_assessment.py
+├── .gitignore                     # Excludes .copilot-tracking/ and temps
+└── docs/                          # Guides and references
 ```
 
 ## Quick Start
 
 1. **Clone the repo**: `git clone https://github.com/SamRakaba/AzMigRepo.git`
-2. **Review HVE agents**: See [AGENTS.md](AGENTS.md) for agent skills and capabilities
-3. **Set up discovery**: Follow [docs/hve-discovery-guide.md](docs/hve-discovery-guide.md)
-4. **Run assessment**: Use the scripts in `scripts/` or invoke agents via Copilot
-
-## Use Cases
-
-- **Hyper-V Host Discovery**: Scan and catalog Hyper-V hosts across datacenters
-- **Guest VM Inventory**: Collect detailed VM metadata for migration planning
-- **Migration Readiness**: Assess workloads for Azure VM, AVS, or containerization
-- **Dependency Analysis**: Map inter-VM dependencies before migration waves
-- **Consolidation Reports**: Generate spreadsheets consolidating assessment data
-- **Cost Planning**: Estimate Azure run costs for Hyper-V workloads
-
-## Prerequisites
-
-- Azure subscription with Azure Migrate project
-- Hyper-V hosts running Windows Server 2012 R2 or later
-- Azure Migrate appliance deployed for Hyper-V discovery
-- Python 3.10+ and PowerShell 7+ for scripts
-- Access to Microsoft Copilot Studio (for agent development)
+2. **Install HVE Core**: Via [VS Code extension](https://marketplace.visualstudio.com/items?itemName=ise-hve-essentials.hve-core) or CLI (`copilot plugin marketplace add microsoft/hve-core`)
+3. **Review agents**: See [AGENTS.md](AGENTS.md) for available agents, skills, and prompts
+4. **Start working**: Use `/task-research <topic>` to begin the RPI workflow
 
 ## Resources
 
-- [Azure Migrate: Hyper-V Assessment](https://learn.microsoft.com/en-us/azure/migrate/tutorial-assess-hyper-v)
-- [Azure Migrate Appliance for Hyper-V](https://learn.microsoft.com/en-us/azure/migrate/how-to-set-up-appliance-hyper-v)
+- [HVE Core — microsoft/hve-core](https://github.com/microsoft/hve-core)
+- [Azure Migrate Documentation](https://learn.microsoft.com/en-us/azure/migrate/)
 - [AZMrepo — Source project](https://github.com/SamRakaba/AZMrepo)
 - [Microsoft Copilot Studio](https://learn.microsoft.com/en-us/microsoft-copilot-studio/)
 
