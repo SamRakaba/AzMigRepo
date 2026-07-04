@@ -10,14 +10,14 @@ Development follows the [HVE Core](https://github.com/microsoft/hve-core) method
 
 ## Key Documents
 
-| File | What It Contains | When To Use |
-|------|-----------------|-------------|
-| [`AZURE_MIGRATE_AGENTS_GUIDE.md`](AZURE_MIGRATE_AGENTS_GUIDE.md) | Full step-by-step implementation (Agents 1-5, PA flows, testing, troubleshooting) | **Start here** — this is the source of truth |
-| [`COPILOT_STUDIO_INSTRUCTIONS.md`](COPILOT_STUDIO_INSTRUCTIONS.md) | System prompt to paste into Agent 1 in Copilot Studio | When configuring Agent 1's instructions |
-| [`COPILOT_STUDIO_GUIDE.md`](COPILOT_STUDIO_GUIDE.md) | Generic Copilot Studio portal tutorial | When new to Copilot Studio |
-| [`COPILOT_INSTRUCTIONS.md`](COPILOT_INSTRUCTIONS.md) | Copilot coding guidelines and patterns | Reference for coding conventions |
-| [`AGENTS.md`](AGENTS.md) | Agent quick-reference + HVE Core development methodology | Quick lookup of agents, variables, flows |
-| [`.github/copilot-instructions.md`](.github/copilot-instructions.md) | Copilot repo behavior rules | Automatically read by GitHub Copilot |
+| File | What It Contains | Version | When To Use |
+|------|-----------------|---------|-------------|
+| [`AZURE_MIGRATE_AGENTS_GUIDE.md`](AZURE_MIGRATE_AGENTS_GUIDE.md) | Full step-by-step implementation (Agents 1-5, PA flows, testing, troubleshooting) | v1.3 | **Start here** — this is the source of truth |
+| [`COPILOT_STUDIO_INSTRUCTIONS.md`](COPILOT_STUDIO_INSTRUCTIONS.md) | System prompt to paste into Agent 1 in Copilot Studio | v1.1 | When configuring Agent 1's instructions |
+| [`COPILOT_STUDIO_GUIDE.md`](COPILOT_STUDIO_GUIDE.md) | Generic Copilot Studio portal tutorial | — | When new to Copilot Studio |
+| [`COPILOT_INSTRUCTIONS.md`](COPILOT_INSTRUCTIONS.md) | Copilot coding guidelines and patterns | — | Reference for coding conventions |
+| [`AGENTS.md`](AGENTS.md) | Agent quick-reference + HVE Core methodology + lessons learned | v1.1 | Quick lookup of agents, variables, flows, pitfalls |
+| [`.github/copilot-instructions.md`](.github/copilot-instructions.md) | Copilot repo behavior rules + UI mapping + lessons learned | v1.3 | Automatically read by GitHub Copilot |
 
 ## Project Structure
 

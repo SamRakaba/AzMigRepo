@@ -1,6 +1,6 @@
-# AGENTS.md — AzMigRepo Agent Reference & Development Guide
+# AGENTS.md — AzMigRepo Agent Reference & Development Guide (v1.1)
 
-> **Full implementation guide**: [`AZURE_MIGRATE_AGENTS_GUIDE.md`](AZURE_MIGRATE_AGENTS_GUIDE.md) (232KB) — complete step-by-step instructions for building all 5 agents, Power Automate flows, testing, and troubleshooting.
+> **Full implementation guide**: [`AZURE_MIGRATE_AGENTS_GUIDE.md`](AZURE_MIGRATE_AGENTS_GUIDE.md) (v1.3) — complete step-by-step instructions for building all 5 agents, Power Automate flows, testing, and troubleshooting. Updated for the **2026 Copilot Studio UI**.
 
 ---
 
@@ -8,13 +8,13 @@
 
 This project documents 5 Copilot Studio agents using a **GPT-4.1-first** architecture where the model handles all intelligence and Power Automate handles only file I/O.
 
-| # | Agent | Purpose | Guide Section |
-|---|-------|---------|---------------|
-| 1 | **File Upload Handler** | Accept CSV/XLSX uploads, GPT-4.1 sheet compliance verification, coordinate processing | [Agent 1](AZURE_MIGRATE_AGENTS_GUIDE.md#agent-1-file-upload-handler) |
-| 2 | **App Inventory Processor** | GPT-4.1 noise detection, deduplication, application consolidation | [Agent 2](AZURE_MIGRATE_AGENTS_GUIDE.md#agent-2-application-inventory-processor) |
-| 3 | **SQL Server Processor** | GPT-4.1 SQL instance consolidation, version grouping | [Agent 3](AZURE_MIGRATE_AGENTS_GUIDE.md#agent-3-sql-server-inventory-processor) |
-| 4 | **Web App Processor** | GPT-4.1 web application consolidation by server type | [Agent 4](AZURE_MIGRATE_AGENTS_GUIDE.md#agent-4-web-app-inventory-processor) |
-| 5 | **Report Generator** | Combine processed data, write Excel to Blob, provide download link | [Agent 5](AZURE_MIGRATE_AGENTS_GUIDE.md#agent-5-report-generator) |
+| # | Agent | Purpose | Guide Section | Build Status |
+|---|-------|---------|---------------|--------------|
+| 1 | **File Upload Handler** | Accept CSV/XLSX uploads, GPT-4.1 sheet compliance verification, coordinate processing | [Agent 1](AZURE_MIGRATE_AGENTS_GUIDE.md#agent-1-file-upload-handler) | 🔧 In progress |
+| 2 | **App Inventory Processor** | GPT-4.1 noise detection, deduplication, application consolidation | [Agent 2](AZURE_MIGRATE_AGENTS_GUIDE.md#agent-2-application-inventory-processor) | 🔧 Topic + flow created |
+| 3 | **SQL Server Processor** | GPT-4.1 SQL instance consolidation, version grouping | [Agent 3](AZURE_MIGRATE_AGENTS_GUIDE.md#agent-3-sql-server-inventory-processor) | ⬜ Not started |
+| 4 | **Web App Processor** | GPT-4.1 web application consolidation by server type | [Agent 4](AZURE_MIGRATE_AGENTS_GUIDE.md#agent-4-web-app-inventory-processor) | ⬜ Not started |
+| 5 | **Report Generator** | Combine processed data, write Excel to Blob, provide download link | [Agent 5](AZURE_MIGRATE_AGENTS_GUIDE.md#agent-5-report-generator) | ⬜ Not started |
 
 ## Global Variables
 
@@ -36,15 +36,16 @@ All agents share state via Global variables (JSON strings in Copilot Studio):
 
 ## Power Automate Flows
 
-| Flow Name | Trigger Type | Purpose |
-|-----------|-------------|---------|
-| **Handle File Upload (Blob Storage)** | Agent Tool | Save file to Blob, return path |
-| **Read Application Inventory Data** | Agent Tool | Read raw app data for GPT-4.1 analysis |
-| **Read SQL Server Inventory Data** | Agent Tool | Read raw SQL data for GPT-4.1 analysis |
-| **Read Web App Inventory Data** | Agent Tool | Read raw web app data for GPT-4.1 analysis |
-| **Generate Consolidated Report** | Agent Tool | Write Excel to Blob, return download URL |
-| **Azure Migrate Processing Orchestrator** | HTTP (optional) | Multi-file batch processing |
-| **Get Processing Status** | Utility | Check processing status |
+| Flow Name | Trigger Type | Purpose | Build Status |
+|-----------|-------------|---------|--------------|
+| **Handle File Upload (Blob Storage)** | Agent Tool | Save file to Blob, return path | ✅ Connected |
+| **Validate Excel Sheet** | Agent Tool | Validate uploaded file, return metadata | ✅ Connected |
+| **Read Application Inventory Data** | Agent Tool | Read raw app data for GPT-4.1 analysis | ✅ Created |
+| **Read SQL Server Inventory Data** | Agent Tool | Read raw SQL data for GPT-4.1 analysis | ⬜ Not started |
+| **Read Web App Inventory Data** | Agent Tool | Read raw web app data for GPT-4.1 analysis | ⬜ Not started |
+| **Generate Consolidated Report** | Agent Tool | Write Excel to Blob, return download URL | ⬜ Not started |
+| **Azure Migrate Processing Orchestrator** | HTTP (optional) | Multi-file batch processing | ⬜ Not started |
+| **Get Processing Status** | Utility | Check processing status | ⬜ Not started |
 
 ---
 
@@ -100,9 +101,95 @@ For quick, small tasks use **rpi-agent** which handles the full cycle autonomous
 All HVE Core agent outputs go to `.copilot-tracking/` (gitignored — never commit these):
 - `research/` — Research documents
 - `plans/` and `details/` — Implementation plans
-- `changes/` — Change logs
+- `changes/` — Change logs and UI discovery notes
 - `reviews/` — Review findings
 - `security/` — OWASP reports
+
+---
+
+## Copilot Studio 2026 UI Quick Reference
+
+> **Critical**: The guide (v1.3) and all instructions use the 2026 Copilot Studio UI. See `.github/copilot-instructions.md` §12 for the full mapping.
+
+| Action | Where |
+|--------|-------|
+| Instructions / System prompt | Main page → **Instructions** tab |
+| Add PA flow as tool | Main page → **Tools** tab → Add a tool → Workflows |
+| Topics | **Top nav** → Topics |
+| Create topic | Topics → **+ Add** → Topic → From blank |
+| Orchestration mode | Settings → **Orchestration** section |
+| Tool input mapping | Topic node → `...` → **Custom** |
+| Test | Bottom-right → **Test your agent** |
+
+---
+
+## Lessons Learned — Pitfalls to Avoid
+
+These are discovered during hands-on building. Apply them when creating or debugging agents.
+
+### Copilot Studio Pitfalls
+
+1. **Variable mapping uses `...` → Custom, NOT `{x}`** — The `{x}` picker works in message nodes, but for tool input mapping use the `...` menu → Custom.
+2. **Power Fx formulas fail for File-type inputs** — `{ contentBytes: Topic.uploadedFiles.Content }` causes "The '.' operator cannot be used on Blob values". Select the File variable directly from the picker.
+3. **Square bracket syntax creates Table, not File** — `[{ contentBytes: ... }]` causes "incorrect type table" error. Never wrap file inputs in `[]`.
+4. **Model Responses is read-only in Classic mode** — The Settings → Model Responses field is greyed out when Classic orchestration is selected. This is expected.
+5. **Output variables get auto-generated names** — When you add a tool node, outputs are auto-captured with names like `rawDataApp`. Rename them via the variable properties panel if needed.
+6. **Wire file upload FIRST, test processing SECOND** — All processing topics depend on `Global.uploadedFilePath` and `Global.sessionId`. If those are empty, every PA tool call fails with "required parameter has a blank or empty value".
+7. **Add condition guards at the top of processing topics** — Check if `Global.uploadedFilePath` is empty before calling any PA tool. If empty, show a message redirecting the user to upload first.
+
+### Power Automate Pitfalls
+
+1. **Rename Compose actions BEFORE referencing them** — `outputs('Generate_Session_ID')` fails if the action is still named "Compose" (internal name = `Compose`).
+2. **Every "Respond to the agent" output must be non-null** — Wrap dynamic values in `coalesce(expression, '')`.
+3. **Both condition branches need "Respond to the agent"** — Missing response in any branch → `FlowActionException: output parameter missing from response data`.
+4. **Azure Blob "Get content" asks for storage account name** — This is the connection setup, not the blob path. Select or create a connection first, then specify container and blob path.
+5. **Managed Identity may not be available** — Some Power Automate environments don't offer Managed Identity for Blob Storage. Use **Entra ID (Service Principal)** with "Storage Blob Data Contributor" RBAC role.
+6. **First test triggers consent popup** — First time a tool runs in the Copilot Studio test panel, a consent dialog appears for storage connections. Grant it once.
+7. **Flow triggers must be "When an agent calls the flow"** — Only flows with this trigger appear in the Workflows list when adding tools in Copilot Studio.
+
+### Architecture Lessons
+
+1. **GPT-4.1 cannot parse binary .xlsx** — The model can analyze text/CSV data passed as strings, but PA flows must extract sheet data from Excel binary files first.
+2. **Set globals BEFORE topic redirects** — Redirects are immediate — the target topic sees globals as they were at redirect time.
+3. **In-memory approach has size limits** — Global variables (JSON strings) work for typical exports (100-500 rows). For 1000+ rows, test to confirm or use blob storage.
+4. **Keep PA flows minimal** — PA should only do blob read/write. All analysis, consolidation, and formatting stays in Copilot Studio topics.
+
+### Development Process Lessons
+
+1. **Pull ALL source files before researching** — Initial research produced incorrect findings because full implementation guides weren't in the repo. Always start with complete sources.
+2. **HVE RPI cycle catches fabrication** — The Research phase caught fabricated PowerShell cmdlets and fake references. Never skip research.
+3. **Validate guides against actual UI interactively** — The guide was written for old UI. Step-by-step building with "what do you see?" questions is the only reliable way to document the current UI.
+4. **Document UI discoveries immediately** — Use `.copilot-tracking/changes/` to capture UI mapping discoveries as they happen.
+
+---
+
+## Skills Reference
+
+### HVE Core Skills (Development Methodology)
+
+| Skill | Command | Purpose |
+|-------|---------|---------|
+| **Research** | `/task-research <topic>` | Investigate before implementing — produces evidence-based findings |
+| **Plan** | `/task-plan` | Create actionable implementation plan from research |
+| **Implement** | `/task-implement` | Execute plan with change tracking |
+| **Review** | `/task-review` | Validate implementation against research and plan |
+| **Security Review** | `/security-review` | OWASP assessment on credential/data handling |
+| **Git Commit** | `/git-commit` | Create Conventional Commit messages |
+| **RPI Agent** | `rpi-agent` | Full Research → Plan → Implement → Review cycle (autonomous) |
+| **Code Review** | `code-review` agent | Multi-perspective review (functional, security, standards) |
+| **Documentation** | `documentation` agent | Doc audit, drift detection, authoring |
+
+### Copilot Studio Build Skills (Agent-Specific)
+
+These skills are derived from lessons learned during implementation and should be applied when building agents:
+
+| Skill | When To Use | Key Actions |
+|-------|-------------|-------------|
+| **Topic Wiring** | Creating a new topic flow | 1) Add trigger phrases, 2) Add welcome message, 3) Add tool call with `...` → Custom mapping, 4) Set globals, 5) Add condition guards, 6) Save |
+| **Tool Registration** | Adding PA flow as tool | 1) Ensure flow has "When an agent calls the flow" trigger, 2) Go to Tools tab → Add a tool → Workflows, 3) Select flow, 4) Verify inputs/outputs |
+| **Condition Guard** | Protecting processing topics | 1) Add condition at top: `Global.uploadedFilePath` is equal to `""`, 2) TRUE branch → redirect message, 3) FALSE branch → proceed with processing |
+| **PA Flow Creation** | Building data extraction flows | 1) "When an agent calls the flow" trigger, 2) Add inputs (filePath, sessionId), 3) Get blob content, 4) "Respond to the agent" with ALL outputs + coalesce() |
+| **Variable Debugging** | When tool calls fail with empty params | 1) Check if globals are populated (test Welcome & Upload first), 2) Check variable scope is Global not Topic, 3) Check connection consent granted |
 
 ## HVE Core Setup
 

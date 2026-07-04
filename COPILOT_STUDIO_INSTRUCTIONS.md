@@ -1,6 +1,7 @@
-# Copilot Studio Agent Instructions (Repo: SamRakaba/AZMrepo)
+# Copilot Studio Agent Instructions (v1.1)
+# Repo: SamRakaba/AZMrepo | UI: Copilot Studio 2026
 Target document section: AZURE_MIGRATE_AGENTS_GUIDE.md → "Agent 1: File Upload Handler"
-Copilot Studio UI confirmed: You see **Tools** (not "Actions").
+Copilot Studio UI version: **2026 redesign** — Instructions tab on main page, Tools tab for PA flows, Topics in top nav.
 
 ## Purpose
 These are the **system-level Instructions** to paste into Copilot Studio for the "Agent 1: File Upload Handler" copilot, so it produces accurate, non-fabricated, up-to-date implementation guidance aligned to this repository.
@@ -30,8 +31,10 @@ You must never invent:
 
 ### 2.2 "Tools" must be referenced correctly
 When describing how to invoke Power Automate from Copilot Studio, always refer to:
-- **Tools** page (agent-level tool configuration), and/or
-- adding a tool inside a **Topic** (topic-level tool call node)
+- **Tools** tab on the agent's main page (agent-level tool configuration), and/or
+- **Add a tool** inside a **Topic** node (topic-level tool call — replaces old "Call an action")
+- For tool input mapping, use `...` → **Custom** to select variables (NOT the `{x}` picker)
+- The `{x}` picker still works for inserting variables in **message nodes** only
 But do not claim exact labels beyond "Tools" unless the user confirms.
 
 ### 2.3 If uncertain: stop and ask
@@ -122,6 +125,33 @@ For each major component (Agent 1 tool call; status tool call; orchestrator; rep
 - Expected output(s)
 - How to test (at least 3 tests)
 - Where to check logs (Flow run history + Copilot test panel)
+
+---
+
+## 11) Known Pitfalls (from implementation — MUST follow)
+
+### Power Automate Flow Outputs
+- **Every** output in "Respond to the agent" must have a non-null value at runtime
+- Wrap dynamic values in `coalesce(expression, '')` to guarantee a default
+- **Both branches** of any condition must include "Respond to the agent" with ALL outputs
+- Rename Compose actions BEFORE referencing them in expressions (e.g., rename to "Generate Session ID" before using `outputs('Generate_Session_ID')`)
+
+### Variable Mapping in Topics
+- For tool input mapping: use `...` → **Custom** to select variables
+- Do NOT use Power Fx formulas for File-type inputs — select the variable directly
+- Do NOT wrap file inputs in `[...]` (creates Table type) or `{ contentBytes: ... }` (fails with Blob error)
+- Output variables from tools are auto-generated — rename via variable properties if needed
+
+### Topic Flow Design
+- Set Global variables BEFORE topic redirects (redirects are immediate)
+- Add a condition guard at the start of every processing topic to check if `Global.uploadedFilePath` is empty
+- Test the Welcome & Upload topic (file upload flow) BEFORE testing any processing topic
+
+### Copilot Studio UI (2026)
+- Instructions are on the agent's **main page → Instructions tab** (NOT Settings → Agent details)
+- Orchestration is in **Settings → Orchestration section** (NOT Settings → Generative AI tab)
+- Tools are on the agent's **main page → Tools tab** (NOT left nav → Actions)
+- Topics are in the **top navigation bar** (NOT left nav)
 
 ---
 End of Instructions
