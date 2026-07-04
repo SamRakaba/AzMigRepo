@@ -346,15 +346,15 @@ This agent is the **starting point of the Azure Migrate processing flow**. It pr
 #### Step 1.3: Create a New Agent
 
 1. On the Copilot Studio home page, locate the left navigation panel
-2. Click on **Copilots** in the left navigation menu
-3. On the Copilots page, click the **+ Create** button in the top-left area
+2. Click on **Agents** in the left navigation menu
+3. On the Agents page, click the **+ Create** button in the top-left area
 4. A dropdown menu will appear with options:
-   - Click on **New copilot**
-5. The "Create a copilot" wizard will open
+   - Click on **New agent**
+5. The "Create an agent" wizard will open
 
 #### Step 1.4: Configure Basic Agent Settings
 
-1. In the "Create a copilot" wizard, you will see several fields to fill out:
+1. In the "Create an agent" wizard, you will see several fields to fill out:
 
 2. **Name field**:
    - Click in the **Name** text field
@@ -399,37 +399,21 @@ This agent is the **starting point of the Azure Migrate processing flow**. It pr
 2. Click on **Settings** in the left navigation menu
 3. The Settings page will open with multiple tabs/sections
 
-#### Step 2.2: Configure Generative AI Settings
+#### Step 2.2: Configure Orchestration Settings
 
-1. In the Settings page, click on the **Generative AI** tab/section
-2. You will see options for configuring AI behavior
-
-3. **Orchestration setting**:
-   - Locate the **Orchestration** option
-   - You will see two options: **Classic** and **Generative**
-   - Click on **Classic** to select it
+1. In the Settings page, click on the **Orchestration** section
+2. You will see two options: **Classic** and **Generative**
+3. Click on **Classic** to select it
    - **Important**: Classic mode ensures the agent follows structured conversation flows rather than generating free-form responses
+4. Click the **Save** button at the top of the page
 
-4. **Generative answers setting**:
-   - Locate the **Generative answers** toggle
-   - Click the toggle to turn it **OFF** (disabled)
-   - This prevents the agent from generating answers outside of your defined topics
+> **Note**: In the 2026 Copilot Studio UI, the Generative answers and Boost conversations toggles from the old "Generative AI" tab have been consolidated into the Orchestration setting. Selecting **Classic** mode disables generative answers and boost automatically.
 
-5. **Boost conversations setting**:
-   - Locate the **Boost conversations** toggle
-   - Click the toggle to turn it **OFF** (disabled)
-   - This ensures the agent strictly follows your conversation design
+#### Step 2.3: Configure Agent Instructions
 
-6. Click the **Save** button at the top of the page
-
-#### Step 2.3: Configure Agent Details and Instructions
-
-1. In the Settings page, click on the **Agent details** tab/section (may also be labeled "Details" or "Copilot details")
-
-2. Scroll down to find the **Instructions** section (may also be labeled "Agent instructions" or "System prompt")
-
+1. Return to the agent's main page (click the agent name in the breadcrumb or top nav)
+2. Click on the **Instructions** tab on the agent's main page
 3. Click in the **Instructions** text area
-
 4. Clear any existing text and paste the following instructions exactly:
 
 ```
@@ -535,9 +519,8 @@ We'll create a dedicated topic to initialize all global variables needed for the
 
 ##### Step 3.1.1: Create the Initialization Topic
 
-1. In the left navigation panel, click on **Topics**
-2. Click the **+ Add a topic** button at the top
-3. From the dropdown menu, select **From blank**
+1. In the top navigation bar, click **Topics**
+2. Click **+ Add** → **Topic** → **From blank**
 4. A new blank topic canvas will open
 
 ##### Step 3.1.2: Configure Topic Name
@@ -739,10 +722,9 @@ This is the main entry point topic where users start their interaction.
 
 ##### Step 4.1.1: Create New Topic
 
-1. In the left navigation panel, click on **Topics**
+1. In the top navigation bar, click **Topics**
 2. The Topics page will display existing system topics
-3. Click the **+ Add a topic** button at the top
-4. From the dropdown menu, select **From blank**
+3. Click **+ Add** → **Topic** → **From blank**
 5. A new blank topic canvas will open
 
 ##### Step 4.1.2: Configure Topic Name and Description
@@ -892,7 +874,7 @@ Welcome! I'm your Azure Migrate CSV Processor. 🤖
 
 ##### Step 4.1.7: Configure the TRUE Branch (Files Uploaded)
 
-> **Note:** In the current version of Copilot Studio (2025), the **"Call an action"** menu option has been replaced by **"Add a tool"**. The former **"Actions"** page has been replaced by the **"Tools"** page. Power Automate flows are now added as **tools** — select the **+** (Add node) icon in a topic and choose **Add a tool**, then select a flow or create a **New Agent flow**. For agent-level tools, use the **Tools** page in the left navigation panel.
+> **Note:** To add a Power Automate flow in a topic, click the **+** (Add node) icon, choose **Add a tool**, then select the flow or create a **New Agent flow**. For agent-level tools, use the **Tools** tab on the agent's main page.
 
 **Part A: Add a Confirmation Message**
 
@@ -1078,8 +1060,8 @@ This topic allows users to check on the status of their file processing. In the 
 
 ##### Step 4.2.1: Create New Topic
 
-1. Click on **Topics** in the left navigation
-2. Click the **+ Add a topic** button
+1. Click on **Topics** in the top navigation bar
+2. Click **+ Add** → **Topic**
 3. Select **From blank**
 
 ##### Step 4.2.2: Configure Topic Name
@@ -1225,8 +1207,8 @@ Please check back in a few moments, or I'll notify you when it's complete.
 
 ##### Step 4.3.1: Create New Topic
 
-1. Click on **Topics** in the left navigation
-2. Click **+ Add a topic** → **From blank**
+1. Click on **Topics** in the top navigation bar
+2. Click **+ Add** → **Topic** → **From blank**
 
 ##### Step 4.3.2: Configure Topic Name
 
@@ -1358,7 +1340,7 @@ What would you like to know?
 
 ##### Step 4.4.1: Create New Topic
 
-1. Click **+ Add a topic** → **From blank**
+1. Click **+ Add** → **Topic** → **From blank**
 2. Name: `Handle Off-Topic Requests`
 
 ##### Step 4.4.2: Add Trigger Phrases
@@ -1455,7 +1437,7 @@ Would you like to upload your Azure Migrate files now?
 
 ### Step 5: Add Power Automate Flows as Tools
 
-> **Note:** In the current version of Copilot Studio (2025), the former **"Actions"** page has been replaced by the **"Tools"** page. Power Automate flows are now added as **tools** — either at the agent level (available to all topics) or at the topic level (available to a single topic). All instructions below use the current Tools-based workflow. For official reference, see [Add an agent flow to an agent as a tool](https://learn.microsoft.com/en-us/microsoft-copilot-studio/flow-agent).
+> **Note:** Power Automate flows are added as **tools** in Copilot Studio, either at the agent level (available to all topics) or at the topic level (available to a single topic). All instructions below use the current Tools-based workflow. For official reference, see [Add an agent flow to an agent as a tool](https://learn.microsoft.com/en-us/microsoft-copilot-studio/flow-agent).
 
 Tools connect your agent to Power Automate flows (called **agent flows**) that perform the actual file processing. An agent flow must have:
 - A **When an agent calls the flow** trigger (also shown as **Run a flow from Copilot**)
@@ -1476,8 +1458,8 @@ Tools connect your agent to Power Automate flows (called **agent flows**) that p
 
 ##### Option B: Create the Flow from the Tools Page
 
-1. In the left navigation panel of Copilot Studio, click on **Tools**
-2. The Tools page displays all existing tools (flows, connectors, prompts, etc.)
+1. On the agent's main page, click the **Tools** tab
+2. The Tools tab displays all existing tools (flows, connectors, prompts, etc.)
 3. Click **Add a tool**
 4. In the **Add tool** panel, select **Flow** to see available flows
 5. If no suitable flow exists, go to [Power Automate](https://make.powerautomate.com) to create one (see Step 5.1.1 below), then return here to add it
@@ -1672,7 +1654,7 @@ Rather than calling an Azure Function, the flow extracts the file name and conte
 
 ##### Step 5.5.6: Add the Tool to the Agent
 
-1. In Copilot Studio, go to **Tools** in the left navigation
+1. In Copilot Studio, go to the **Tools** tab on the agent's main page
 2. Click **+ Add a tool**
 3. Select **Validate Excel Sheets - Azure Migrate**
 4. Review:
@@ -1719,8 +1701,8 @@ Rather than calling an Azure Function, the flow extracts the file name and conte
 
 #### Step 6.1: Open the Test Panel
 
-1. Look at the bottom-left corner of the Copilot Studio interface
-2. Click on **Test your copilot** or the **Test** button
+1. Look at the bottom-right corner of the Copilot Studio interface
+2. Click **Test** in the bottom-right to open the **Test your agent** panel
 3. A test chat panel will open on the right side
 
 #### Step 6.2: Test the Welcome Flow
@@ -1858,7 +1840,7 @@ This action builds the full path to the uploaded file in blob storage, which is 
 
 ### Step 4: Test the Upload Agent
 
-1. Use the **Test bot** panel
+1. Use the **Test your agent** panel
 2. Verify:
    - [ ] Greeting message displays correctly
    - [ ] File upload prompt works
@@ -2097,7 +2079,7 @@ Your completed data extraction flow should look like this:
 
 #### Step 2.2: Add the Flow as a Tool
 
-1. In the left navigation, click **Tools**
+1. On the agent's main page, click the **Tools** tab
 2. Click **+ Add a tool**
 3. Search for and select your **Read Application Inventory Data** flow
 4. Review the tool configuration:
@@ -2114,8 +2096,8 @@ The agent's Instructions define the GPT-4.1 model's analysis behavior. This is w
 #### Step 3.1: Open Agent Settings
 
 1. In Copilot Studio, click **Settings** (gear icon) in the top bar
-2. Click **Generative AI** (or **AI** depending on your version)
-3. Locate the **Instructions** section (sometimes called "How should your copilot act?")
+2. Return to the agent's main page if needed
+3. Click the **Instructions** tab
 
 #### Step 3.2: Add Application Analysis Instructions
 
@@ -2215,7 +2197,7 @@ unless the user explicitly asks for them.
 
 #### Step 4.4: Add Tool Call Node - Read Application Data
 
-1. Click **+** → **Call an action** → Select **Read Application Inventory Data** (your tool)
+1. Click **+** → **Add a tool** → Select **Read Application Inventory Data** (your tool)
 2. Map the inputs:
    - **filePath**: Select the file path variable from your upload workflow (e.g., `Global.uploadedFilePath`)
    - **sessionId**: Select the session ID variable (e.g., `Global.sessionId`)
@@ -2267,7 +2249,7 @@ After the GPT-4.1 model completes the consolidation analysis, the agent generate
 > **Design principle:** CSV generation is a text-formatting task that the GPT-4.1 model handles naturally. By generating the CSV in the agent topic, we avoid an unnecessary Power Automate flow and keep the processing within the GPT-4.1-first architecture.
 
 1. Click **+** → **Send a message**
-2. Enter the following GPT-4.1 model prompt (insert the `Global.consolidatedApplications` variable using the **{x}** variable picker — click **{x}**, select **Global.consolidatedApplications**, and it will be inserted as a dynamic variable reference):
+2. Enter the following GPT-4.1 model prompt (this is a message node, so insert the `Global.consolidatedApplications` variable using the **{x}** variable picker — click **{x}**, select **Global.consolidatedApplications**, and it will be inserted as a dynamic variable reference. For tool input fields elsewhere, use `...` → **Custom** instead):
 
 ```
 Now generate a CSV-formatted dedup report from the consolidated application data
@@ -2501,7 +2483,7 @@ This minimal flow reads raw SQL Server inventory data from the uploaded file and
 
 #### Step 2.1: Add the Flow as a Tool
 
-1. In Copilot Studio, click **Tools** in the left navigation
+1. In Copilot Studio, click the **Tools** tab on the agent's main page
 2. Click **+ Add a tool**
 3. Search for and select your **Read SQL Server Inventory Data** flow
 4. Review the tool configuration:
@@ -2515,7 +2497,7 @@ This minimal flow reads raw SQL Server inventory data from the uploaded file and
 
 #### Step 3.1: Add SQL Server Analysis Instructions
 
-In the agent's Instructions (Settings → Generative AI → Instructions), append the following:
+In the agent's **Instructions** tab on the main page, append the following:
 
 ```
 ## SQL Server Inventory Analysis
@@ -2598,7 +2580,7 @@ unless the user explicitly asks for them.
 
 #### Step 4.4: Add Tool Call Node - Read SQL Data
 
-1. Click **+** → **Call an action** → Select **Read SQL Server Inventory Data**
+1. Click **+** → **Add a tool** → Select **Read SQL Server Inventory Data**
 2. Map inputs:
    - **filePath**: `Global.uploadedFilePath`
    - **sessionId**: `Global.sessionId`
@@ -2808,7 +2790,7 @@ This minimal flow reads raw web application inventory data from the uploaded fil
 
 #### Step 2.1: Add the Flow as a Tool
 
-1. In Copilot Studio, click **Tools** in the left navigation
+1. In Copilot Studio, click the **Tools** tab on the agent's main page
 2. Click **+ Add a tool**
 3. Search for and select your **Read Web App Inventory Data** flow
 4. Review the tool configuration:
@@ -2822,7 +2804,7 @@ This minimal flow reads raw web application inventory data from the uploaded fil
 
 #### Step 3.1: Add Web App Analysis Instructions
 
-In the agent's Instructions (Settings → Generative AI → Instructions), append the following:
+In the agent's **Instructions** tab on the main page, append the following:
 
 ```
 ## Web App Inventory Analysis
@@ -2902,7 +2884,7 @@ unless the user explicitly asks for them.
 
 #### Step 4.4: Add Tool Call Node - Read Web App Data
 
-1. Click **+** → **Call an action** → Select **Read Web App Inventory Data**
+1. Click **+** → **Add a tool** → Select **Read Web App Inventory Data**
 2. Map inputs:
    - **filePath**: `Global.uploadedFilePath`
    - **sessionId**: `Global.sessionId`
@@ -4237,12 +4219,12 @@ For Azure Blob Storage, you have several options to generate secure download URL
 
 ### Connecting Flows to Copilot Studio
 
-> **Note:** In the current version of Copilot Studio (2025), the former **"Actions"** page has been replaced by the **"Tools"** page. Power Automate flows are now added as **tools**. For official reference, see [Add an agent flow to an agent as a tool](https://learn.microsoft.com/en-us/microsoft-copilot-studio/flow-agent).
+> **Note:** Power Automate flows are added as **tools** in Copilot Studio. For official reference, see [Add an agent flow to an agent as a tool](https://learn.microsoft.com/en-us/microsoft-copilot-studio/flow-agent).
 
 #### Option A: Add from the Tools Page (Agent-Level Tool)
 
 1. In Copilot Studio, select **Agents**, then select your agent
-2. Go to the **Tools** page and click **Add a tool**
+2. Go to the **Tools** tab and click **Add a tool**
 3. In the **Add tool** panel, select **Flow** to list available agent flows
 4. Select the flow (e.g., **Handle File Upload - Azure Migrate**) and click **Add and configure**
 5. On the tool's **Details** page, configure **Inputs** using Power Fx formulas (see input mapping below)
@@ -4255,7 +4237,7 @@ For Azure Blob Storage, you have several options to generate secure download URL
 3. Select the flow from the list — a new **Action** node appears in the topic
 4. Map inputs and outputs directly on the Action node
 
-> **Terminology note:** Although Power Automate flows are now added via the **Tools** page (replacing the former "Actions" page), the node that appears on the topic canvas when you add a flow is still labeled **Action** in the current Copilot Studio UI. If your UI shows a different label, use the label you see.
+> **Terminology note:** The node that appears on the topic canvas when you add a flow may still be labeled **Action** in the current Copilot Studio UI. If your UI shows a different label, use the label you see.
 
 #### Input/Output Mapping
 
@@ -4742,8 +4724,8 @@ For applications:
 
 ---
 
-**Document Version**: 1.2  
-**Last Updated**: March 2026  
+**Document Version**: 1.3  
+**Last Updated**: July 2026  
 **Author**: AZMrepo Project Team
 
 ---
