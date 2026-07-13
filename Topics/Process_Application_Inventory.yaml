@@ -1,0 +1,114 @@
+kind: AdaptiveDialog
+beginDialog:
+  kind: OnRecognizedIntent
+  id: main
+  intent:
+    triggerQueries:
+      - Process application inventory
+      - Analyze applications
+      - Consolidate application list
+      - Process apps from file
+
+  actions:
+    - kind: ConditionGroup
+      id: conditionGroup_xmUv12
+      conditions:
+        - id: conditionItem_VMIATr
+          condition: =!IsBlank(Global.uploadedFilePath)
+
+      elseActions:
+        - kind: SendActivity
+          id: sendActivity_5vUlyO
+          activity: |-
+            ⚠️ No file has been uploaded yet. Please upload your Azure Migrate CSV or Excel file first.
+
+            To get started:
+            1. Type "Start" or "Upload files"
+            2. Upload your Azure Migrate export file
+            3. Wait for sheet validation to complete
+            4. Then I'll process the application inventory automatically
+
+        - kind: BeginDialog
+          id: ddR8v2
+          dialog: Default_azureMigrateFileHandler.topic.ConversationStart
+
+    - kind: SendActivity
+      id: sendActivity_4CgfmL
+      activity: Reading application inventory data from the uploaded file...
+
+    - kind: InvokeFlowAction
+      id: invokeFlowAction_CJGT5B
+      input:
+        binding:
+          text: =Global.uploadedFilePath
+          text_1: =Global.sessionId
+
+      output:
+        binding:
+          rawapplicationdata: Topic.rawAppData
+          rowcount: Topic.rowCount
+          status: Topic.status
+
+      flowId: 0ddbd227-2977-f111-ab0f-70a8a59be24e
+
+    - kind: ConditionGroup
+      id: conditionGroup_checkSize
+      conditions:
+        - id: conditionItem_tooLarge
+          condition: =Topic.status = "TooLarge"
+          actions:
+            - kind: SendActivity
+              id: sendActivity_tooLarge
+              activity: |-
+                ⚠️ **The ApplicationInventory data is too large to analyze in one pass.**
+
+                Your file exceeds the AI model's size limit (~100K tokens). To proceed, please do one of the following and re-upload:
+
+                1. **Trim columns** — keep only: MachineName, Application, Version, Provider, MachineManagerFqdn (biggest reduction).
+                2. **Split the file** into smaller batches (e.g., by MachineManagerFqdn or provider).
+                3. **Remove noisy rows** before export.
+
+                Then type "Upload files" to try again.
+
+            - kind: BeginDialog
+              id: beginDialog_tooLargeRestart
+              dialog: Default_azureMigrateFileHandler.topic.WelcomeandUploadInstructions
+
+      elseActions:
+        - kind: BeginDialog
+          id: h4lP2J
+          input:
+            binding:
+              rawAppData: =Topic.rawAppData
+
+          dialog: Default_azureMigrateFileHandler.action.AnalyzeApplicationInventory
+          output:
+            binding:
+              predictionOutput: Topic.predictionOutput
+
+        - kind: ConditionGroup
+          id: conditionGroup_checkResult
+          conditions:
+            - id: conditionItem_hasResult
+              condition: =!IsBlank(Topic.predictionOutput.text)
+              actions:
+                - kind: SetVariable
+                  id: setVariable_consolidatedApps
+                  variable: Global.consolidatedApplications
+                  value: =Topic.predictionOutput.text
+
+                - kind: SendActivity
+                  id: sendActivity_ck3KT3
+                  activity: ✅ Application inventory analyzed. Unique business applications consolidated and stored for report generation.
+
+                - kind: BeginDialog
+                  id: beginDialog_appToSQL
+                  dialog: Default_azureMigrateFileHandler.topic.ProcessSQLServerInventory
+
+          elseActions:
+            - kind: SendActivity
+              id: sendActivity_noResult
+              activity: ⚠️ The analysis did not return any results. Please verify the uploaded file contains an ApplicationInventory sheet with data, then try again.
+
+inputType: {}
+outputType: {}

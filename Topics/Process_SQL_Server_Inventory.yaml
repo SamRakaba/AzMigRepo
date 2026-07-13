@@ -1,0 +1,115 @@
+kind: AdaptiveDialog
+beginDialog:
+  kind: OnRecognizedIntent
+  id: main
+  intent:
+    triggerQueries:
+      - Process SQL Server inventory
+      - Analyze SQL Server instances
+      - Consolidate SQL Server list
+      - Process SQL from file
+
+  actions:
+    - kind: ConditionGroup
+      id: conditionGroup_sqlGuard
+      conditions:
+        - id: conditionItem_sqlHasFile
+          condition: =!IsBlank(Global.uploadedFilePath)
+
+      elseActions:
+        - kind: SendActivity
+          id: sendActivity_sqlNoFile
+          activity: |-
+            ⚠️ No file has been uploaded yet. Please upload your Azure Migrate CSV or Excel file first.
+
+            To get started:
+            1. Type "Start" or "Upload files"
+            2. Upload your Azure Migrate export file
+            3. Wait for sheet validation to complete
+            4. Then I'll process the SQL Server inventory automatically
+
+        - kind: BeginDialog
+          id: beginDialog_sqlNoFileRestart
+          dialog: Default_azureMigrateFileHandler.topic.ConversationStart
+
+    - kind: SendActivity
+      id: sendActivity_sqlReading
+      activity: ⏳ Reading SQL Server inventory data from the uploaded file...
+
+    - kind: InvokeFlowAction
+      id: invokeFlowAction_readSQL
+      displayName: Read SQL Server Inventory Data
+      input:
+        binding:
+          text: =Global.uploadedFilePath
+          text_1: =Global.sessionId
+
+      output:
+        binding:
+          rawsqldata: Topic.rawSQLData
+          rowcount: Topic.rowCount
+          status: Topic.status
+
+      flowId: PLACEHOLDER-REPLACE-WITH-Read-SQL-Server-Inventory-Data-flowId
+
+    - kind: ConditionGroup
+      id: conditionGroup_sqlCheckSize
+      conditions:
+        - id: conditionItem_sqlTooLarge
+          condition: =Topic.status = "TooLarge"
+          actions:
+            - kind: SendActivity
+              id: sendActivity_sqlTooLarge
+              activity: |-
+                ⚠️ **The SQL Server data is too large to analyze in one pass.**
+
+                Your file exceeds the AI model's size limit (~100K tokens). To proceed, please do one of the following and re-upload:
+
+                1. **Trim columns** — keep only: MachineName, Instance Name, Edition, Service Pack, Version, Port, MachineManagerFqdn (biggest reduction).
+                2. **Split the file** into smaller batches (e.g., by MachineManagerFqdn).
+                3. **Remove noisy rows** before export.
+
+                Then type "Upload files" to try again.
+
+            - kind: BeginDialog
+              id: beginDialog_sqlTooLargeRestart
+              dialog: Default_azureMigrateFileHandler.topic.WelcomeandUploadInstructions
+
+      elseActions:
+        - kind: BeginDialog
+          id: beginDialog_sqlAnalyze
+          input:
+            binding:
+              rawSQLData: =Topic.rawSQLData
+
+          dialog: Default_azureMigrateFileHandler.action.AnalyzeSQLServerInventory
+          output:
+            binding:
+              predictionOutput: Topic.predictionOutput
+
+        - kind: ConditionGroup
+          id: conditionGroup_sqlCheckResult
+          conditions:
+            - id: conditionItem_sqlHasResult
+              condition: =!IsBlank(Topic.predictionOutput.text)
+              actions:
+                - kind: SetVariable
+                  id: setVariable_consolidatedSQL
+                  variable: Global.consolidatedSQLInstances
+                  value: =Topic.predictionOutput.text
+
+                - kind: SendActivity
+                  id: sendActivity_sqlDone
+                  activity: ✅ SQL Server inventory analyzed. Unique instances consolidated and grouped by version, stored for report generation.
+
+                - kind: BeginDialog
+                  id: beginDialog_sqlToWebApp
+                  dialog: Default_azureMigrateFileHandler.topic.ProcessWebAppInventory
+
+          elseActions:
+            - kind: SendActivity
+              id: sendActivity_sqlNoResult
+              activity: ⚠️ The analysis did not return any results. Please verify the uploaded file contains a SQL Server sheet with data, then try again.
+
+inputType: {}
+outputType: {}

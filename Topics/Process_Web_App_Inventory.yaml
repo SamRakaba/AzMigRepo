@@ -1,0 +1,115 @@
+kind: AdaptiveDialog
+beginDialog:
+  kind: OnRecognizedIntent
+  id: main
+  intent:
+    triggerQueries:
+      - Process web app inventory
+      - Analyze web applications
+      - Consolidate web app list
+      - Process web servers
+
+  actions:
+    - kind: ConditionGroup
+      id: conditionGroup_webGuard
+      conditions:
+        - id: conditionItem_webHasFile
+          condition: =!IsBlank(Global.uploadedFilePath)
+
+      elseActions:
+        - kind: SendActivity
+          id: sendActivity_webNoFile
+          activity: |-
+            ⚠️ No file has been uploaded yet. Please upload your Azure Migrate CSV or Excel file first.
+
+            To get started:
+            1. Type "Start" or "Upload files"
+            2. Upload your Azure Migrate export file
+            3. Wait for sheet validation to complete
+            4. Then I'll process the web application inventory automatically
+
+        - kind: BeginDialog
+          id: beginDialog_webNoFileRestart
+          dialog: Default_azureMigrateFileHandler.topic.ConversationStart
+
+    - kind: SendActivity
+      id: sendActivity_webReading
+      activity: ⏳ Reading web application inventory data from the uploaded file...
+
+    - kind: InvokeFlowAction
+      id: invokeFlowAction_readWebApp
+      displayName: Read Web App Inventory Data
+      input:
+        binding:
+          text: =Global.uploadedFilePath
+          text_1: =Global.sessionId
+
+      output:
+        binding:
+          rawwebappdata: Topic.rawWebAppData
+          rowcount: Topic.rowCount
+          status: Topic.status
+
+      flowId: PLACEHOLDER-REPLACE-WITH-Read-Web-App-Inventory-Data-flowId
+
+    - kind: ConditionGroup
+      id: conditionGroup_webCheckSize
+      conditions:
+        - id: conditionItem_webTooLarge
+          condition: =Topic.status = "TooLarge"
+          actions:
+            - kind: SendActivity
+              id: sendActivity_webTooLarge
+              activity: |-
+                ⚠️ **The web application data is too large to analyze in one pass.**
+
+                Your file exceeds the AI model's size limit (~100K tokens). To proceed, please do one of the following and re-upload:
+
+                1. **Trim columns** — keep only: MachineName, WebServerType, WebAppName, VirtualDirectory, ApplicationPool, FrameworkVersion, MachineManagerFqdn (biggest reduction).
+                2. **Split the file** into smaller batches (e.g., by WebServerType).
+                3. **Remove noisy rows** before export.
+
+                Then type "Upload files" to try again.
+
+            - kind: BeginDialog
+              id: beginDialog_webTooLargeRestart
+              dialog: Default_azureMigrateFileHandler.topic.WelcomeandUploadInstructions
+
+      elseActions:
+        - kind: BeginDialog
+          id: beginDialog_webAnalyze
+          input:
+            binding:
+              rawWebAppData: =Topic.rawWebAppData
+
+          dialog: Default_azureMigrateFileHandler.action.AnalyzeWebAppInventory
+          output:
+            binding:
+              predictionOutput: Topic.predictionOutput
+
+        - kind: ConditionGroup
+          id: conditionGroup_webCheckResult
+          conditions:
+            - id: conditionItem_webHasResult
+              condition: =!IsBlank(Topic.predictionOutput.text)
+              actions:
+                - kind: SetVariable
+                  id: setVariable_consolidatedWebApps
+                  variable: Global.consolidatedWebApps
+                  value: =Topic.predictionOutput.text
+
+                - kind: SendActivity
+                  id: sendActivity_webDone
+                  activity: ✅ Web application inventory analyzed. Unique web apps consolidated and grouped by server type, stored for report generation.
+
+                - kind: BeginDialog
+                  id: beginDialog_webToReport
+                  dialog: Default_azureMigrateFileHandler.topic.GenerateReport
+
+          elseActions:
+            - kind: SendActivity
+              id: sendActivity_webNoResult
+              activity: ⚠️ The analysis did not return any results. Please verify the uploaded file contains a WebApplications sheet with data, then try again.
+
+inputType: {}
+outputType: {}

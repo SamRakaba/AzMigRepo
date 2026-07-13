@@ -268,7 +268,7 @@ Azure Blob Storage provides temporary file storage for uploaded files and persis
            └── webapps_consolidated.json
    reports/
        └── {SessionID}/
-           └── ConsolidatedReport_{timestamp}.xlsx
+           └── ConsolidatedReport_{timestamp}.csv
    ```
 
 4. **Configure Lifecycle Management (Auto-cleanup)**:
@@ -2001,7 +2001,9 @@ This minimal flow reads raw application inventory data from the uploaded file an
    - **Name**: `sessionId`
    - **Description**: `Processing session identifier`
 
-#### Step 1.4: Add Excel Data Retrieval
+#### Step 1.4: Add Blob Retrieval and CSV Extraction
+
+> **Input format — CSV required (Path A).** The Excel Online (Business) connector's *List rows present in a table* action requires the file to live in **SharePoint/OneDrive** and to contain a **named Table** — neither is true for Blob‑stored Azure Migrate exports. Running `Get blob content (V2)` on an `.xlsx` returns the **entire workbook binary as base64** (all sheets + XML + styles), which is unparseable by the GPT‑4.1 model and previously ballooned the prompt to ~1M tokens. The supported, script‑free approach is therefore to process the **ApplicationInventory sheet exported as `.csv`**, decode it to text, and pass the rows to the model. Power Automate still performs **file I/O only**.
 
 1. Click **+** below the trigger → **Add an action**
 2. Search for `Azure Blob Storage` → Select **Get blob content (V2)**
@@ -2009,11 +2011,19 @@ This minimal flow reads raw application inventory data from the uploaded file an
    - **Storage account name or blob endpoint**: Select your Azure Storage Account connection — **PLACEHOLDER – replace with your account**
    - **Container**: `uploads`
    - **Blob**: Click **Dynamic content** → Select `filePath` from trigger
-4. Then add a **Parse JSON** action to parse the Excel content into rows
-5. Configure the Parse JSON to extract the `ApplicationInventory` sheet data
-6. Rename the final data action to: `Get ApplicationInventory Rows`
+4. Add a **Compose** action and rename it exactly to **`Extract csv text`**. This decodes the base64 blob body into readable CSV text:
+   ```
+   base64ToString(body('Get_blob_content_V2')?['$content'])
+   ```
+   > The output must be **human‑readable CSV rows** (header line + data rows), **not** base64 or `PK…` binary. If your blob action has a different display name, match it — the internal name is the display name with spaces → underscores.
+5. Add a second **Compose** action, renamed **`CsvLength`**, to measure the payload size for the guard (see Step 1.5):
+   ```
+   length(outputs('Extract_csv_text'))
+   ```
 
-#### Step 1.5: Return Data to Agent
+#### Step 1.5: Return Data to Agent (with size guard)
+
+The **GPT‑4.1 model has a 128,000‑token context window**. Leaving room for the prompt instructions and the model's output, keep the CSV input at roughly **≤ 100K tokens ≈ ~350,000 characters**. The guard below returns `status = "TooLarge"` (and withholds the oversized payload) when the CSV exceeds the threshold, so the topic can show remediation guidance **instead of** letting the model fail with `InvalidPredictionInput`.
 
 1. Click **+** → **Add an action**
 2. Search for `Respond to the agent`
@@ -2023,19 +2033,22 @@ This minimal flow reads raw application inventory data from the uploaded file an
    - **Name**: `rawApplicationData`
    - **Value**: Click **Expression** → Type:
      ```
-     coalesce(string(body('Get_ApplicationInventory_Rows')?['value']), '[]')
+     if(greater(outputs('CsvLength'), 350000), '', outputs('Extract_csv_text'))
      ```
    - Click **+ Add an output** → Select **Text**
    - **Name**: `rowCount`
-   - **Value**: Click **Expression** → Type:
+   - **Value**: Click **Expression** → Type (returns row count minus the header; use `'0'` if you do not add a `Lines` split action):
      ```
-     string(length(body('Get_ApplicationInventory_Rows')?['value']))
+     coalesce(string(sub(length(split(outputs('Extract_csv_text'), decodeUriComponent('%0A'))), 1)), '0')
      ```
    - Click **+ Add an output** → Select **Text**
    - **Name**: `status`
-   - **Value**: `DataReady`
+   - **Value**: Click **Expression** → Type:
+     ```
+     if(greater(outputs('CsvLength'), 350000), 'TooLarge', 'DataReady')
+     ```
 
-> **Note**: Every output parameter must have a non-null value. The `coalesce()` wrapper ensures a safe default if the data retrieval returns null. The `string()` function serializes the array as text for the agent.
+> **Note**: Every output parameter must have a non-null value — that is why `rawApplicationData` uses `if(..., '', ...)` and `rowCount` uses `coalesce(..., '0')`. The `350000` character threshold is tunable; lower it (e.g., `300000`) for a larger safety margin. Keeping a single **Respond to the agent** action (no branches) avoids the "output parameter missing from response data" pitfall where one branch forgets to respond.
 
 #### Step 1.6: Save the Flow
 
@@ -2054,18 +2067,48 @@ Your completed data extraction flow should look like this:
                                     │
                                     ▼
 ┌─────────────────────────────────────────────────────────────────────────┐
-│ Get ApplicationInventory Rows                                            │
-│ (List rows from Excel ApplicationInventory table)                       │
+│ Get blob content (V2)      (returns base64 of the CSV blob)             │
+└─────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│ Extract csv text  (Compose)                                             │
+│   base64ToString(body('Get_blob_content_V2')?['$content'])              │
+│   → plain, readable CSV rows                                            │
+└─────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│ CsvLength  (Compose)   length(outputs('Extract_csv_text'))              │
 └─────────────────────────────────────────────────────────────────────────┘
                                     │
                                     ▼
 ┌─────────────────────────────────────────────────────────────────────────┐
 │ Respond to the agent                                                     │
-│ • rawApplicationData (JSON string of all rows)                          │
-│ • rowCount (total rows read)                                            │
-│ • status ("DataReady")                                                  │
+│ • rawApplicationData ('' if > 350K chars, else the CSV text)           │
+│ • rowCount (data rows, header excluded)                                │
+│ • status ("DataReady", or "TooLarge" if over the limit)                │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
+
+#### Step 1.8: Handling Large Files (60K+ rows)
+
+A single-pass approach is bounded by the model's 128K-token context. Practical single-pass ceilings:
+
+| CSV shape | ~chars/row | ~tokens/row | Safe single-pass rows (~100K tokens) |
+|-----------|-----------|-------------|---------------------------------------|
+| Full Azure Migrate columns (~20+) | 800–1,200 | ~250–350 | **~300–400 rows** |
+| Trimmed to 5 columns (MachineName, Application, Version, Provider, MachineManagerFqdn) | ~120 | ~40 | **~2,000–2,500 rows** |
+
+**For files well beyond this — e.g., 60,000+ rows — single-pass is impossible** (60K trimmed rows ≈ ~7.2M chars ≈ ~2M tokens, ~20× over budget). Use one of these strategies:
+
+1. **Trim columns at export (do this first, always).** Keep only the five columns the consolidation uses. This is the single biggest lever and raises the single-pass ceiling ~6×.
+2. **Batch/chunk the CSV rows.** Split the decoded CSV into batches of ~2,000–2,500 trimmed rows, invoke the `Analyze Application Inventory` prompt **per batch** (e.g., in an *Apply to each* loop over the batches), collect each batch's JSON, then run a **final merge/dedup pass** on the combined unique-app lists. Reuse the `Lines` / `DataLines` / `Chunk` Compose actions for the split. This keeps all analysis in GPT-4.1 (per batch) while Power Automate only slices text and aggregates.
+   - Batch count ≈ `ceil(rowCount / 2500)`. For 60K trimmed rows that is ~24 batches.
+   - The merge pass must **re-deduplicate across batches**, because the same business application can appear in multiple batches.
+3. **Pre-filter rows at export.** Exclude known-noise providers or machine scopes before uploading to shrink the dataset.
+
+> **In-memory reminder:** Global variables (JSON strings) comfortably hold typical exports (100–500 rows). For very large consolidated outputs, stage intermediate batch results in Blob Storage rather than a single Global variable.
 
 ---
 
@@ -2397,6 +2440,9 @@ This agent uses the GPT-4.1 model to analyze and consolidate SQL Server inventor
 
 ### Step 1: Create the SQL Server Data Extraction Tool (Power Automate Flow)
 
+> **⚠️ Superseded (2026-07-12) — use the CSV pattern, not the Excel-table steps below.**
+> Agent 2 testing proved the model **cannot** parse the `.xlsx` binary (`InvalidPredictionInput`, ~1M tokens). Build this flow with the canonical CSV pattern instead: `Get blob content (V2)` → Compose `Extract csv text` = `base64ToString(body('Get_blob_content_V2')?['$content'])` → Compose `CsvLength` = `length(outputs('Extract_csv_text'))` → `Respond to the agent` with `rawSQLData = if(greater(outputs('CsvLength'),350000), '', outputs('Extract_csv_text'))`, `rowCount` (coalesced), `status = if(greater(outputs('CsvLength'),350000),'TooLarge','DataReady')`. Topic + prompt already authored: `Topics/Process_SQL_Server_Inventory.yaml`, `Prompts/Analyze_SQL_Server_Inventory.md`.
+
 This minimal flow reads raw SQL Server inventory data from the uploaded file and returns it to the Copilot agent.
 
 #### Step 1.1: Access Power Automate
@@ -2427,28 +2473,37 @@ This minimal flow reads raw SQL Server inventory data from the uploaded file and
    - **Name**: `sessionId`
    - **Description**: `Processing session identifier`
 
-#### Step 1.4: Add Excel Data Retrieval
+#### Step 1.4: Add Blob Retrieval and CSV Extraction
 
-1. Click **+** → **Add an action**
+> **Input format — CSV required (Path A).** Export the **SQLServer sheet as `.csv`**. `Get blob content (V2)` on an `.xlsx` returns the whole workbook binary (unparseable, ~1M tokens). Power Automate performs **file I/O only**.
+
+1. Click **+** below the trigger → **Add an action**
 2. Search for `Azure Blob Storage` → Select **Get blob content (V2)**
 3. Configure:
    - **Storage account name or blob endpoint**: Select your Azure Storage Account connection — **PLACEHOLDER – replace with your account**
    - **Container**: `uploads`
    - **Blob**: Click **Dynamic content** → Select `filePath` from trigger
-4. Then add a **Parse JSON** action to parse the Excel content into rows
-5. Configure the Parse JSON to extract the `SQLServer` sheet data
-6. Rename the final data action to: `Get SQL Server Rows`
+4. Add a **Compose** action, renamed exactly **`Extract csv text`**, to decode the base64 blob body into readable CSV rows:
+   ```
+   base64ToString(body('Get_blob_content_V2')?['$content'])
+   ```
+   > Output must be human-readable CSV (header + data rows), not base64/`PK…` binary. Rename the action **before** referencing it — the internal name is the display name with spaces → underscores.
+5. Add a second **Compose** action, renamed **`CsvLength`**, to measure size for the guard:
+   ```
+   length(outputs('Extract_csv_text'))
+   ```
 
-#### Step 1.5: Return Data to Agent
+#### Step 1.5: Return Data to Agent (with size guard)
 
-1. Click **+** → **Add an action**
-2. Search for and select **Respond to the agent**
-3. Add output parameters:
-   - **Name**: `rawSQLData` | **Type**: Text | **Value**: Expression: `coalesce(string(body('Get_SQL_Server_Rows')?['value']), '[]')`
-   - **Name**: `rowCount` | **Type**: Text | **Value**: Expression: `string(length(body('Get_SQL_Server_Rows')?['value']))`
-   - **Name**: `status` | **Type**: Text | **Value**: `DataReady`
+The **GPT-4.1 model has a 128,000-token context window** (~350,000 chars input budget). The guard returns `status = "TooLarge"` and withholds the oversized payload so the topic can show remediation guidance instead of failing with `InvalidPredictionInput`.
 
-> **Note**: Every output parameter must have a non-null value. Use `coalesce()` to provide safe defaults.
+1. Click **+** → **Add an action** → search `Respond to the agent` → select **Respond to the agent**
+2. Add output parameters (Text), all non-null:
+   - **`rawSQLData`** → Expression: `if(greater(outputs('CsvLength'), 350000), '', outputs('Extract_csv_text'))`
+   - **`rowCount`** → Expression: `coalesce(string(sub(length(split(outputs('Extract_csv_text'), decodeUriComponent('%0A'))), 1)), '0')`
+   - **`status`** → Expression: `if(greater(outputs('CsvLength'), 350000), 'TooLarge', 'DataReady')`
+
+> **Note**: Keep a single **Respond to the agent** action (no branches) so no branch forgets to respond. The `350000` threshold is tunable.
 
 #### Step 1.6: Save the Flow
 
@@ -2465,15 +2520,26 @@ This minimal flow reads raw SQL Server inventory data from the uploaded file and
                                     │
                                     ▼
 ┌─────────────────────────────────────────────────────────────────────────┐
-│ Get SQL Server Rows (List rows from Excel SQLServer table)              │
+│ Get blob content (V2)      (returns base64 of the CSV blob)             │
+└─────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│ Extract csv text  (Compose)                                             │
+│   base64ToString(body('Get_blob_content_V2')?['$content'])              │
+└─────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│ CsvLength  (Compose)   length(outputs('Extract_csv_text'))              │
 └─────────────────────────────────────────────────────────────────────────┘
                                     │
                                     ▼
 ┌─────────────────────────────────────────────────────────────────────────┐
 │ Respond to the agent                                                     │
-│ • rawSQLData (JSON string of all rows)                                  │
-│ • rowCount (total rows read)                                            │
-│ • status ("DataReady")                                                  │
+│ • rawSQLData ('' if > 350K chars, else the CSV text)                    │
+│ • rowCount (data rows, header excluded)                                 │
+│ • status ("DataReady", or "TooLarge" if over the limit)                │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -2704,6 +2770,9 @@ This agent uses the GPT-4.1 model to analyze and consolidate web application inv
 
 ### Step 1: Create the Web App Data Extraction Tool (Power Automate Flow)
 
+> **⚠️ Superseded (2026-07-12) — use the CSV pattern, not the Excel-table steps below.**
+> Build this flow with the canonical CSV pattern: `Get blob content (V2)` → Compose `Extract csv text` = `base64ToString(body('Get_blob_content_V2')?['$content'])` → Compose `CsvLength` = `length(outputs('Extract_csv_text'))` → `Respond to the agent` with `rawWebAppData = if(greater(outputs('CsvLength'),350000), '', outputs('Extract_csv_text'))`, `rowCount` (coalesced), `status = if(greater(outputs('CsvLength'),350000),'TooLarge','DataReady')`. Topic + prompt already authored: `Topics/Process_Web_App_Inventory.yaml`, `Prompts/Analyze_Web_App_Inventory.md`.
+
 This minimal flow reads raw web application inventory data from the uploaded file and returns it to the Copilot agent.
 
 #### Step 1.1: Access Power Automate
@@ -2734,28 +2803,37 @@ This minimal flow reads raw web application inventory data from the uploaded fil
    - **Name**: `sessionId`
    - **Description**: `Processing session identifier`
 
-#### Step 1.4: Add Excel Data Retrieval
+#### Step 1.4: Add Blob Retrieval and CSV Extraction
 
-1. Click **+** → **Add an action**
+> **Input format — CSV required (Path A).** Export the **WebApplications sheet as `.csv`**. `Get blob content (V2)` on an `.xlsx` returns the whole workbook binary (unparseable, ~1M tokens). Power Automate performs **file I/O only**.
+
+1. Click **+** below the trigger → **Add an action**
 2. Search for `Azure Blob Storage` → Select **Get blob content (V2)**
 3. Configure:
    - **Storage account name or blob endpoint**: Select your Azure Storage Account connection — **PLACEHOLDER – replace with your account**
    - **Container**: `uploads`
    - **Blob**: Click **Dynamic content** → Select `filePath` from trigger
-4. Then add a **Parse JSON** action to parse the Excel content into rows
-5. Configure the Parse JSON to extract the `WebApplications` sheet data
-6. Rename the final data action to: `Get Web App Rows`
+4. Add a **Compose** action, renamed exactly **`Extract csv text`**, to decode the base64 blob body into readable CSV rows:
+   ```
+   base64ToString(body('Get_blob_content_V2')?['$content'])
+   ```
+   > Output must be human-readable CSV (header + data rows), not base64/`PK…` binary. Rename the action **before** referencing it — the internal name is the display name with spaces → underscores.
+5. Add a second **Compose** action, renamed **`CsvLength`**, to measure size for the guard:
+   ```
+   length(outputs('Extract_csv_text'))
+   ```
 
-#### Step 1.5: Return Data to Agent
+#### Step 1.5: Return Data to Agent (with size guard)
 
-1. Click **+** → **Add an action**
-2. Search for and select **Respond to the agent**
-3. Add output parameters:
-   - **Name**: `rawWebAppData` | **Type**: Text | **Value**: Expression: `coalesce(string(body('Get_Web_App_Rows')?['value']), '[]')`
-   - **Name**: `rowCount` | **Type**: Text | **Value**: Expression: `string(length(body('Get_Web_App_Rows')?['value']))`
-   - **Name**: `status` | **Type**: Text | **Value**: `DataReady`
+The **GPT-4.1 model has a 128,000-token context window** (~350,000 chars input budget). The guard returns `status = "TooLarge"` and withholds the oversized payload so the topic can show remediation guidance instead of failing with `InvalidPredictionInput`.
 
-> **Note**: Every output parameter must have a non-null value. Use `coalesce()` to provide safe defaults.
+1. Click **+** → **Add an action** → search `Respond to the agent` → select **Respond to the agent**
+2. Add output parameters (Text), all non-null:
+   - **`rawWebAppData`** → Expression: `if(greater(outputs('CsvLength'), 350000), '', outputs('Extract_csv_text'))`
+   - **`rowCount`** → Expression: `coalesce(string(sub(length(split(outputs('Extract_csv_text'), decodeUriComponent('%0A'))), 1)), '0')`
+   - **`status`** → Expression: `if(greater(outputs('CsvLength'), 350000), 'TooLarge', 'DataReady')`
+
+> **Note**: Keep a single **Respond to the agent** action (no branches) so no branch forgets to respond. The `350000` threshold is tunable.
 
 #### Step 1.6: Save the Flow
 
@@ -2772,15 +2850,26 @@ This minimal flow reads raw web application inventory data from the uploaded fil
                                     │
                                     ▼
 ┌─────────────────────────────────────────────────────────────────────────┐
-│ Get Web App Rows (List rows from Excel WebApplications table)           │
+│ Get blob content (V2)      (returns base64 of the CSV blob)             │
+└─────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│ Extract csv text  (Compose)                                             │
+│   base64ToString(body('Get_blob_content_V2')?['$content'])              │
+└─────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│ CsvLength  (Compose)   length(outputs('Extract_csv_text'))              │
 └─────────────────────────────────────────────────────────────────────────┘
                                     │
                                     ▼
 ┌─────────────────────────────────────────────────────────────────────────┐
 │ Respond to the agent                                                     │
-│ • rawWebAppData (JSON string of all rows)                               │
-│ • rowCount (total rows read)                                            │
-│ • status ("DataReady")                                                  │
+│ • rawWebAppData ('' if > 350K chars, else the CSV text)                 │
+│ • rowCount (data rows, header excluded)                                 │
+│ • status ("DataReady", or "TooLarge" if over the limit)                │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -2969,485 +3058,163 @@ The consolidated web application list has been stored and is ready for report ge
 ## Agent 5: Report Generator
 
 ### Purpose
-Generate the final consolidated Excel spreadsheet with all unique applications, SQL Server instances, and web applications, and provide a download link to the user. This flow creates a professional multi-sheet Excel report.
+Combine the three consolidated datasets (`Global.consolidatedApplications`, `Global.consolidatedSQLInstances`, `Global.consolidatedWebApps`) into a single downloadable **CSV report**, write it to Azure Blob Storage, and return a time-limited SAS download link to the user.
 
-> **⚠️ Prerequisite**: Before configuring this flow, you must create an Excel template with predefined tables. See the [Creating the Excel Template](#creating-the-excel-template) section at the end of Agent 5 for detailed instructions. Upload the template to your Azure Blob Storage container (e.g., `templates/ReportTemplate.xlsx`) before proceeding.
+> **GPT-4.1-first — no Excel template, no Azure Functions.** The *Format Consolidated Report* AI Builder prompt (`Prompts/Format_Consolidated_Report.md`) formats all three in-memory JSON datasets into one **sectioned CSV** body. The *Generate Consolidated Report* flow performs **file I/O only**: write the CSV to Blob and return a SAS link. Topic already authored: `Topics/Generate_Report.yaml`.
 
 ---
 
-### Step 1: Create the Report Generation Flow
+### Step 1: Create the Format Consolidated Report Prompt (AI Builder)
 
-#### Step 1.1: Access Power Automate
+The report body is generated by the model, not by Power Automate. Create the prompt tool exactly as you did for Agents 2–4.
 
-1. Open your web browser
-2. Navigate to: **https://make.powerautomate.com**
-3. Sign in with your Microsoft 365 credentials if prompted
-4. Ensure you are in the correct environment
+#### Step 1.1: Add the Prompt
 
-#### Step 1.2: Create New Flow
+1. In Copilot Studio, on the agent's main page open the **Tools** tab → **+ Add a tool** → **Create a prompt** (AI Builder / Prompt)
+2. Name it: `Format Consolidated Report`
+3. Paste the prompt text from **`Prompts/Format_Consolidated_Report.md`** in this repo
+4. Define three **Text** inputs: `applicationsJson`, `sqlJson`, `webAppsJson`
+5. Save. The prompt output is read from `predictionOutput.text` in the topic (same pattern as Agents 2–4)
 
-1. In the left navigation, click **My flows**
+> The prompt instructs the model to emit a single CSV with `## Applications`, `## SQL Server Instances`, and `## Web Applications` sections. No Excel, no code.
+
+---
+
+### Step 2: Create the Generate Consolidated Report Flow
+
+This is the only Power Automate flow for Agent 5. It writes the model-formatted CSV to Blob and returns a SAS URL.
+
+#### Step 2.1: Create the Flow
+
+1. Navigate to **https://make.powerautomate.com** → **My flows**
 2. Click **+ New flow** → **Instant cloud flow**
-3. Configure:
-   - **Flow name**: `Generate Consolidated Report`
-   - **Trigger**: Select **When a HTTP request is received**
-4. Click **Create**
+3. **Flow name**: `Generate Consolidated Report`
+4. **Trigger**: Select **When an agent calls the flow** (Run a flow from Copilot)
+5. Click **Create**
 
-#### Step 1.3: Configure the HTTP Trigger with Input Schema
+#### Step 2.2: Configure Flow Inputs
 
-1. Click on the trigger to expand it
-2. Click **Use sample payload to generate schema**
-3. Paste the following comprehensive JSON:
+Click the trigger and add two **Text** inputs:
 
-> **EXAMPLE ONLY — replace values with your own.** The machine names, domains, and IDs below are sample data used solely to generate the trigger schema.
+- **`reportBody`** — the CSV text produced by the *Format Consolidated Report* prompt
+- **`sessionId`** — the processing session identifier
 
-```json
-{
-  "uniqueApplications": [
-    {
-      "Application": "Microsoft SQL Server 2019",
-      "Version": "15.0.2000.5",
-      "Provider": "Microsoft",
-      "MachineName": "Server01",
-      "MachineManagerFqdn": "manager.contoso.com"
-    }
-  ],
-  "uniqueSQLInstances": [
-    {
-      "MachineName": "SQLServer01",
-      "InstanceName": "MSSQLSERVER",
-      "Edition": "Enterprise",
-      "ServicePack": "SP2",
-      "Version": "15.0.2000.5",
-      "Port": "1433",
-      "MachineManagerFqdn": "manager.contoso.com"
-    }
-  ],
-  "uniqueWebApps": [
-    {
-      "WebAppName": "ContosoPortal",
-      "WebServerType": "IIS",
-      "VirtualDirectory": "/portal",
-      "ApplicationPool": "ContosoAppPool",
-      "FrameworkVersion": ".NET 4.8",
-      "MachineName": "WebServer01",
-      "MachineManagerFqdn": "manager.contoso.com"
-    }
-  ],
-  "sessionId": "session-123-guid",
-  "userEmail": "user@contoso.com",
-  "storageType": "AzureBlob"
-}
+#### Step 2.3: Build the Report File Name
+
+1. Click **+** → **Add an action** → **Compose**, renamed **`Report file name`**
+2. Value (Expression):
+   ```
+   concat('ConsolidatedReport_', formatDateTime(utcNow(), 'yyyyMMdd_HHmmss'), '.csv')
+   ```
+
+#### Step 2.4: Write the CSV to Blob Storage
+
+1. Click **+** → **Add an action** → search `Azure Blob Storage` → **Create blob (V2)**
+2. Configure:
+   - **Storage account name or blob endpoint**: Select your Azure Storage Account connection — **PLACEHOLDER – replace with your account**
+   - **Folder path / Container**: `reports`
+   - **Blob name**: Expression: `concat(triggerBody()?['text_1'], '/', outputs('Report_file_name'))`
+     > `text` = `reportBody`, `text_1` = `sessionId` — agent-called flow inputs surface as generic `text`/`text_1` by type/order. Confirm the mapping against your trigger.
+   - **Blob content**: Expression: `triggerBody()?['text']`  (the `reportBody` CSV)
+3. Rename the action to: `Create report blob`
+
+#### Step 2.5: Create the Download Link (SAS)
+
+1. Click **+** → **Add an action** → search `Azure Blob Storage` → **Create SAS URI by path (V2)**
+2. Configure:
+   - **Storage account name or blob endpoint**: Select your Azure Storage Account — **PLACEHOLDER – replace with your account**
+   - **Blob path**: Expression: `body('Create_report_blob')?['Path']`
+   - **Group Policy / Permissions**: `Read`
+   - **Expiry Time**: Expression: `addHours(utcNow(), 24)`
+3. Rename the action to: `Create download link`
+
+> The **Create SAS URI by path (V2)** connector action generates a time-limited, read-only URL without custom code. If unavailable in your environment, use a Managed Identity–backed Logic App or a pre-scoped SAS. Keep expiry short and permissions minimal (see Security §6).
+
+#### Step 2.6: Respond to the Agent
+
+1. Click **+** → **Add an action** → **Respond to the agent**
+2. Add output parameters (Text), **all non-null via `coalesce`**:
+   - **`downloadUrl`** → Expression: `coalesce(body('Create_download_link')?['WebUrl'], '')`
+   - **`status`** → Expression: `if(equals(coalesce(body('Create_download_link')?['WebUrl'], ''), ''), 'Failed', 'Complete')`
+3. Click **Save**
+
+#### Step 2.7: Flow Diagram
+
 ```
-4. Click **Done**
-
----
-
-### Step 2: Initialize Flow Variables
-
-#### Step 2.1: Add Variable - reportFileName
-
-1. Click **+** → **Add an action**
-2. Search for and select **Initialize variable**
-3. Configure:
-   - **Name**: `reportFileName`
-   - **Type**: **String**
-   - **Value**: Click **Expression** → Type:
-   ```
-   concat('ConsolidatedReport_', formatDateTime(utcNow(), 'yyyyMMdd_HHmmss'), '.xlsx')
-   ```
-4. Rename to: `Initialize reportFileName`
-
-#### Step 2.2: Add Variable - downloadUrl
-
-1. Click **+** → **Add an action** → **Initialize variable**
-2. Configure:
-   - **Name**: `downloadUrl`
-   - **Type**: **String**
-   - **Value**: (leave empty for now)
-3. Rename to: `Initialize downloadUrl`
-
-#### Step 2.3: Add Variable - reportFilePath
-
-1. Click **+** → **Add an action** → **Initialize variable**
-2. Configure:
-   - **Name**: `reportFilePath`
-   - **Type**: **String**
-   - **Value**: (leave empty)
-3. Rename to: `Initialize reportFilePath`
-
----
-
-### Step 3: Create the Report Folder
-
-> **Note:** Azure Blob Storage uses virtual folder paths within containers. There is no need to explicitly create folders — they are created automatically when a blob is uploaded with a path prefix.
-
----
-
-### Step 4: Create the Excel File with Template
-
-#### Step 4.1: Option A - Copy Template from Blob Storage (Recommended)
-
-If you have a template Excel file in Azure Blob Storage:
-
-1. Click **+** → **Add an action**
-2. Search for `Azure Blob Storage` → Select **Get blob content (V2)**
-3. Configure:
-   - **Storage account name or blob endpoint**: Select your Azure Storage Account — **PLACEHOLDER – replace with your account**
-   - **Container**: `templates`
-   - **Blob**: `ReportTemplate.xlsx`
-4. Rename to: `Get Report Template`
-
-5. Click **+** → **Add an action**
-6. Search for `Azure Blob Storage` → Select **Create blob (V2)**
-7. Configure:
-   - **Storage account name or blob endpoint**: Select your Azure Storage Account
-   - **Container**: `reports`
-   - **Blob name**: Expression: `concat(triggerBody()?['sessionId'], '/', variables('reportFileName'))`
-   - **Blob content**: Click **Dynamic content** → Select **File Content** from "Get Report Template"
-8. Rename to: `Create Report File`
-
-#### Step 4.2: Option B - Create File Dynamically
-
-If creating from scratch:
-
-1. Click **+** → **Add an action**
-2. Search for `Azure Blob Storage` → Select **Create blob (V2)**
-3. Configure:
-   - **Storage account name or blob endpoint**: Select your Azure Storage Account — **PLACEHOLDER – replace with your account**
-   - **Container**: `reports`
-   - **Blob name**: Expression: `concat(triggerBody()?['sessionId'], '/', variables('reportFileName'))`
-   - **Blob content**: Leave empty (we'll populate via Excel connector)
-4. Rename to: `Create Empty Report File`
-
-**Note**: Creating Excel files from scratch requires additional setup. Using a template is recommended.
-
----
-
-### Step 5: Set Report File Path
-
-1. Click **+** → **Add an action**
-2. Select **Set variable**
-3. Configure:
-   - **Name**: `reportFilePath`
-   - **Value**: Use Dynamic content:
-   ```
-   /Reports/@{triggerBody()?['sessionId']}/@{variables('reportFileName')}
-   ```
-4. Rename to: `Set Report File Path`
-
----
-
-### Step 6: Build and Store the Report (GPT-4.1 Model Approach)
-
-> **Important:** The Excel Online (Business) connector's row-insertion actions require a file in a SharePoint or OneDrive location, which is not used in this solution. Instead, the **GPT-4.1 model** formats the consolidated data into structured CSV/JSON output within the agent conversation, and a Power Automate flow writes this data to Azure Blob Storage as a downloadable report. This approach eliminates the need for Azure Functions or custom code — all data formatting intelligence is handled by the GPT-4.1 model.
-
-#### Step 6.1: GPT-4.1 Model Generates Report Data
-
-The GPT-4.1 model (configured in the Copilot Studio agent) receives the consolidated data from Global variables and formats it into structured output suitable for report generation. The agent instructions should include a prompt like:
-
-> **Prompt for GPT-4.1 model (include in Agent 5 Instructions):**
-> ```
-> When generating the consolidated report, format the data as follows:
-> 1. Take the uniqueApplications JSON from Global.consolidatedApplications
-> 2. Take the uniqueSQLInstances JSON from Global.consolidatedSQLInstances
-> 3. Take the uniqueWebApps JSON from Global.consolidatedWebApps
-> 4. Produce a structured JSON output containing all three datasets with
->    their column headers, ready to be written as an Excel file
-> 5. Pass the formatted data to the "Generate Consolidated Report" tool
-> ```
-
-The model formats the data; the Power Automate flow handles only the file I/O (writing to Azure Blob Storage).
-
-#### Step 6.2: Add Power Automate Flow to Write the Report
-
-The Power Automate flow receives the GPT-4.1-formatted data and writes it to Azure Blob Storage:
-
-1. Click **+** → **Add an action**
-2. Search for `Azure Blob Storage` → Select **Create blob (V2)**
-3. Configure:
-   - **Storage account name or blob endpoint**: Select your Azure Storage Account — **PLACEHOLDER – replace with your account**
-   - **Container**: `reports`
-   - **Blob name**: Expression: `concat(triggerBody()?['sessionId'], '/', variables('reportFileName'))`
-   - **Blob content**: Use the formatted report data from the trigger body (the GPT-4.1 model passes this as input to the tool)
-4. Rename to: `Write Report To Blob`
-
-#### Step 6.3: Set Report File Path
-
-1. Click **+** → **Add an action**
-2. Select **Set variable**
-3. Configure:
-   - **Name**: `reportFilePath`
-   - **Value**: Expression: `concat(triggerBody()?['sessionId'], '/', variables('reportFileName'))`
-4. Rename to: `Set Report File Path`
-
-> **Alternative approach — Excel template with Azure Function:**
-> If you need a multi-sheet Excel file (.xlsx) with formatted tables, you can use an Azure Function with a library like ClosedXML (.NET) or openpyxl (Python) to generate the Excel file. The GPT-4.1 model still performs all data consolidation and formatting — the Azure Function would only handle the Excel binary file creation. However, for many use cases, a CSV report generated entirely by the GPT-4.1 model is sufficient and avoids external dependencies.
-
----
-
-### Step 7: Generate Download Link
-
-#### Step 7.1: Generate SAS Download URL
-
-1. After all data loops, click **+** → **Add an action**
-2. Search for `Azure Blob Storage` → Select **Create SAS URI by path (V2)**
-3. Configure:
-   - **Storage account name or blob endpoint**: Select your Azure Storage Account — **PLACEHOLDER – replace with your account**
-   - **Container**: `reports`
-   - **Blob path**: `@{variables('reportFilePath')}`
-   - **Permissions**: `Read`
-   - **Expiry time**: Expression: `addHours(utcNow(), 24)`
-4. Rename to: `Create Download Link`
-
-> **Note:** The **Create SAS URI by path (V2)** action is a built-in Azure Blob Storage connector action in Power Automate that generates a time-limited, read-only SAS URL without custom code. The URL expires after 24 hours (configurable). If this action is not available in your environment, use a pre-configured SAS token or Logic App with Managed Identity (see Flow 2: Get Processing Status for alternatives).
-
-#### Step 9.2: Store the Download URL
-
-1. Click **+** → **Add an action**
-2. Select **Set variable**
-3. Configure:
-   - **Name**: `downloadUrl`
-   - **Value**: Click **Dynamic content** → Select **Web URL** from "Create Download Link" output
-     - Or use expression: `coalesce(body('Create_SAS_URI_by_path_(V2)')?['WebUrl'], '')`
-4. Rename to: `Store Download URL`
-
----
-
-### Step 10: Send Email Notification (Optional but Recommended)
-
-#### Step 10.1: Add Email Action
-
-1. Click **+** → **Add an action**
-2. Search for `Outlook`
-3. Select **Send an email (V2)** (Office 365 Outlook)
-4. If prompted, sign in to create the connection
-
-#### Step 10.2: Configure the Email
-
-1. **To**: Click **Dynamic content** → Select `userEmail` from trigger
-2. **Subject**: Type:
-   ```
-   ✅ Your Azure Migrate Consolidated Report is Ready
-   ```
-3. **Body**: Click in the body field and paste:
-
-```html
-<html>
-<body style="font-family: 'Segoe UI', Arial, sans-serif; color: #333;">
-<h2 style="color: #0078d4;">🎉 Your Azure Migrate Report is Ready!</h2>
-
-<p>Hello,</p>
-
-<p>Your Azure Migrate data has been processed successfully. Here's a summary of what was consolidated:</p>
-
-<table style="border-collapse: collapse; margin: 20px 0;">
-<tr style="background-color: #f4f4f4;">
-<th style="padding: 10px; border: 1px solid #ddd; text-align: left;">Category</th>
-<th style="padding: 10px; border: 1px solid #ddd; text-align: right;">Count</th>
-</tr>
-<tr>
-<td style="padding: 10px; border: 1px solid #ddd;">📊 Unique Applications</td>
-<td style="padding: 10px; border: 1px solid #ddd; text-align: right;"><strong>@{length(triggerBody()?['uniqueApplications'])}</strong></td>
-</tr>
-<tr>
-<td style="padding: 10px; border: 1px solid #ddd;">🗄️ SQL Server Instances</td>
-<td style="padding: 10px; border: 1px solid #ddd; text-align: right;"><strong>@{length(triggerBody()?['uniqueSQLInstances'])}</strong></td>
-</tr>
-<tr>
-<td style="padding: 10px; border: 1px solid #ddd;">🌐 Web Applications</td>
-<td style="padding: 10px; border: 1px solid #ddd; text-align: right;"><strong>@{length(triggerBody()?['uniqueWebApps'])}</strong></td>
-</tr>
-</table>
-
-<p style="margin: 20px 0;">
-<a href="@{variables('downloadUrl')}" style="background-color: #0078d4; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; display: inline-block;">📥 Download Your Report</a>
-</p>
-
-<p><strong>Report Details:</strong></p>
-<ul>
-<li><strong>File Name:</strong> @{variables('reportFileName')}</li>
-<li><strong>Session ID:</strong> @{triggerBody()?['sessionId']}</li>
-<li><strong>Generated:</strong> @{utcNow()}</li>
-</ul>
-
-<p>The report includes three sheets:</p>
-<ol>
-<li><strong>Unique Applications</strong> - Consolidated application inventory with duplicates and noise removed</li>
-<li><strong>SQL Server Inventory</strong> - Unique SQL Server instances across all machines</li>
-<li><strong>Web App Inventory</strong> - Unique web applications across all machines</li>
-</ol>
-
-<hr style="margin: 20px 0; border: none; border-top: 1px solid #ddd;">
-<p style="color: #666; font-size: 12px;">
-This report was generated automatically by the Azure Migrate CSV Processor.<br>
-If you have any questions, please contact your IT administrator.
-</p>
-</body>
-</html>
+┌─────────────────────────────────────────────────────────────────────────┐
+│ When an agent calls the flow   (Inputs: reportBody, sessionId)          │
+└─────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│ Report file name (Compose)  ConsolidatedReport_<timestamp>.csv          │
+└─────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│ Create report blob (Create blob V2)  reports/<sessionId>/<file>.csv     │
+│   • content = reportBody (model-generated CSV)                          │
+└─────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│ Create download link (Create SAS URI by path V2, Read, 24h expiry)      │
+└─────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│ Respond to the agent  • downloadUrl (coalesced)  • status               │
+└─────────────────────────────────────────────────────────────────────────┘
 ```
 
-5. **Importance**: Select **Normal**
-6. Rename to: `Send Report Notification Email`
+---
+
+### Step 3: Add the Flow as a Tool
+
+1. In Copilot Studio, open the **Tools** tab → **+ Add a tool**
+2. Select the **Generate Consolidated Report** flow (only flows with the "When an agent calls the flow" trigger appear)
+3. Confirm inputs (`reportBody`, `sessionId`) and outputs (`downloadUrl`, `status`)
+4. Click **Add**
 
 ---
 
-### Step 11: Return Results
+### Step 4: Wire the Generate Report Topic
 
-#### Step 11.1: Compose Final Output
+Use the authored **`Topics/Generate_Report.yaml`** (open the topic → **</> code** editor → paste → **Save**). The topic:
 
-1. Click **+** → **Add an action** → **Compose**
-2. In **Inputs**, paste:
-```json
-{
-  "status": "Complete",
-  "reportFileName": "@{variables('reportFileName')}",
-  "downloadUrl": "@{variables('downloadUrl')}",
-  "reportPath": "@{variables('reportFilePath')}",
-  "statistics": {
-    "uniqueApplications": @{length(triggerBody()?['uniqueApplications'])},
-    "uniqueSQLInstances": @{length(triggerBody()?['uniqueSQLInstances'])},
-    "uniqueWebApps": @{length(triggerBody()?['uniqueWebApps'])},
-    "totalUniqueItems": @{add(add(length(triggerBody()?['uniqueApplications']), length(triggerBody()?['uniqueSQLInstances'])), length(triggerBody()?['uniqueWebApps']))}
-  },
-  "generatedAt": "@{utcNow()}",
-  "sessionId": "@{triggerBody()?['sessionId']}",
-  "emailSent": true
-}
-```
-3. Rename to: `Compose Report Output`
+1. **Guards** on all three datasets — `=!IsBlank(Global.consolidatedApplications) && !IsBlank(Global.consolidatedSQLInstances) && !IsBlank(Global.consolidatedWebApps)`. If any is blank, it shows which step to run and redirects to upload/processing.
+2. Calls the **Format Consolidated Report** prompt with the three globals mapped to `applicationsJson`, `sqlJson`, `webAppsJson`; reads `predictionOutput.text`.
+3. Calls the **Generate Consolidated Report** tool with `reportBody = Topic.predictionOutput.text`, `sessionId = Global.sessionId`.
+4. Sets `Global.downloadUrl = <tool output>` and presents the link to the user.
 
-#### Step 11.2: Add HTTP Response
-
-1. Click **+** → **Add an action** → **Response**
-2. Configure:
-   - **Status Code**: `200`
-   - **Headers**: Add `Content-Type`: `application/json`
-   - **Body**: Click **Dynamic content** → Select **Outputs** from "Compose Report Output"
-3. Rename to: `Return Report Results`
+> **Lessons applied:** set globals **before** any redirect; every branch responds; wrap all flow outputs in `coalesce`; replace the placeholder `flowId` in the YAML with the real GUID after creating the flow.
 
 ---
 
-### Step 12: Save and Test
+### Step 5: Test the Report Generator
 
-#### Step 12.1: Save the Flow
+#### Step 5.1: Test in Copilot Studio
 
-1. Click **Save** at the top-right
-2. Wait for confirmation
-
-#### Step 12.2: Copy the Flow URL
-
-1. Click on the HTTP trigger
-2. Copy the **HTTP POST URL**
-3. Save this URL for the Orchestrator flow
-
-#### Step 12.3: Test the Flow
-
-1. Click **Test** → **Manually** → **Test**
-2. Send a test request with sample data
+1. Run the full chain first (upload → app → SQL → web) so all three globals are populated
+2. In the **Test your agent** panel, trigger report generation (or let the Web App topic redirect into it)
 3. Verify:
-   - Excel file is created
-   - All three sheets are populated
-   - Download link is generated
-   - Email is sent
+   - The **Format Consolidated Report** prompt returns a sectioned CSV (`## Applications` / `## SQL Server Instances` / `## Web Applications`)
+   - The flow writes `reports/<sessionId>/ConsolidatedReport_<timestamp>.csv`
+   - A working 24-hour SAS `downloadUrl` is returned and shown to the user
+   - `status = "Complete"`
 
----
+#### Step 5.2: Test Cases (Definition of Done)
 
-### Complete Flow Diagram
+| # | Case | Input | Expected |
+|---|------|-------|----------|
+| 1 | Happy path | All three globals populated | CSV written, SAS link returned, `status=Complete` |
+| 2 | Missing dataset | One global blank | Topic guard shows which step to run; no flow call |
+| 3 | SAS failure | Connector returns empty WebUrl | `downloadUrl=''`, `status=Failed`, user sees retry guidance |
 
-```
-┌─────────────────────────────────────────────────────────────────────────┐
-│ When a HTTP request is received                                         │
-│ (Inputs: uniqueApplications, uniqueSQLInstances, uniqueWebApps,         │
-│  sessionId, userEmail)                                                  │
-└─────────────────────────────────────────────────────────────────────────┘
-                                    │
-                                    ▼
-┌─────────────────────────────────────────────────────────────────────────┐
-│ Initialize Variables                                                     │
-│ • reportFileName (String)                                                │
-│ • downloadUrl (String)                                                   │
-│ • reportFilePath (String)                                               │
-└─────────────────────────────────────────────────────────────────────────┘
-                                    │
-                                    ▼
-┌─────────────────────────────────────────────────────────────────────────┐
-│ Write Report To Blob (Azure Blob Storage)                                │
-│ • Receives GPT-4.1-formatted data from agent                            │
-│ • Writes report file to reports/{sessionId}/{reportFileName}            │
-│ • No Azure Function needed — model handles all data formatting          │
-└─────────────────────────────────────────────────────────────────────────┘
-                                    │
-                                    ▼
-┌─────────────────────────────────────────────────────────────────────────┐
-│ Set Report File Path (from blob write)                                   │
-└─────────────────────────────────────────────────────────────────────────┘
-                                    │
-                                    ▼
-┌─────────────────────────────────────────────────────────────────────────┐
-│ Create Download Link (Azure Blob SAS URL via PA connector)               │
-└─────────────────────────────────────────────────────────────────────────┘
-                                    │
-                                    ▼
-┌─────────────────────────────────────────────────────────────────────────┐
-│ Store Download URL                                                       │
-└─────────────────────────────────────────────────────────────────────────┘
-                                    │
-                                    ▼
-┌─────────────────────────────────────────────────────────────────────────┐
-│ Send Report Notification Email (Office 365 Outlook)                      │
-└─────────────────────────────────────────────────────────────────────────┘
-                                    │
-                                    ▼
-┌─────────────────────────────────────────────────────────────────────────┐
-│ Compose Report Output (JSON with status, URL, statistics)               │
-└─────────────────────────────────────────────────────────────────────────┘
-                                    │
-                                    ▼
-┌─────────────────────────────────────────────────────────────────────────┐
-│ Return Report Results (HTTP 200 Response)                                │
-└─────────────────────────────────────────────────────────────────────────┘
-```
+#### Step 5.3: Where to Check Logs
 
----
-
-### Creating the Excel Template
-
-For the Report Generator to work properly, you need an Excel template with predefined tables.
-
-#### Step-by-Step Template Creation
-
-1. **Open Microsoft Excel** (desktop or online)
-
-2. **Create a new blank workbook**
-
-3. **Sheet 1 - Applications**:
-   - Rename the sheet tab to: `Applications`
-   - In cell **A1**, type: `Application`
-   - In cell **B1**, type: `Version`
-   - In cell **C1**, type: `Provider`
-   - In cell **D1**, type: `MachineName`
-   - Select cells **A1:D1**
-   - Go to **Insert** tab → Click **Table**
-   - Check "My table has headers" → Click **OK**
-   - Right-click the table → Select **Table** → **Rename Table**
-   - Name the table: `UniqueApplications`
-
-4. **Sheet 2 - SQL Servers**:
-   - Click the **+** button to add a new sheet
-   - Rename to: `SQL Servers`
-   - Add headers: `MachineName`, `InstanceName`, `Edition`, `ServicePack`, `Version`, `Port`
-   - Convert to table named: `UniqueSQLInstances`
-
-5. **Sheet 3 - Web Apps**:
-   - Add another new sheet
-   - Rename to: `Web Apps`
-   - Add headers: `WebAppName`, `WebServerType`, `VirtualDirectory`, `ApplicationPool`, `FrameworkVersion`, `MachineName`
-   - Convert to table named: `UniqueWebApps`
-
-6. **Save the template**:
-   - Save as: `ReportTemplate.xlsx`
-   - Upload to Azure Blob Storage: `templates/ReportTemplate.xlsx`
+- **Power Automate** → the *Generate Consolidated Report* flow → **28-day run history** (blob write + SAS action)
+- **Copilot Studio** → **Test your agent** panel (prompt output + topic flow)
 
 ---
 

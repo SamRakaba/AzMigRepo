@@ -1,0 +1,215 @@
+kind: AdaptiveDialog
+beginDialog:
+  kind: OnRecognizedIntent
+  id: main
+  intent:
+    displayName: Welcome and Upload Instructions
+    triggerQueries:
+      - start
+      - Hello
+      - Upload files
+      - Process Azure Migrate files
+      - Help me consolidate applications
+      - I need to upload CSV files
+      - Azure Migrate CSV processing
+      - Consolidate application inventory
+      - Process migration assessment
+      - Begin file upload
+      - Process CSV
+
+  actions:
+    - kind: Question
+      id: question_ghdTFU
+      interruptionPolicy:
+        allowInterruption: true
+
+      variable: init:Topic.uploadedFiles
+      prompt: |-
+        **Instructions for Uploading Azure Migrate CSV Files:**
+
+        1. Export your data from Azure Migrate portal
+        2. Ensure your files contain the required sheets:
+        • ApplicationInventory (Machine names, Applications, Versions)
+        • SQL Server (Instance names, Editions, Versions)
+        • WebApplications (Web server types, Web app names, Frameworks)
+        Files may also include a Database sheet — this is accepted but not currently processed
+        3. Files can be in CSV or Excel (.xlsx) format
+        4. You can upload one or multiple files at once
+
+        **What I'll do with your files:**
+        • Use AI-powered analysis to identify noise and duplicates
+        • Consolidate application, SQL Server, and web app inventories
+        • Generate a downloadable report with unique entries
+
+        **Please upload your Azure Migrate CSV file(s) to begin processing.**
+      entity:
+        kind: FilePrebuiltEntity
+        includeFileMetadata: true
+
+    - kind: ConditionGroup
+      id: conditionGroup_lLoYmd
+      conditions:
+        - id: conditionItem_DRYqn7
+          condition: =!IsBlank(Topic.uploadedFiles)
+          displayName: Files were uploaded
+          actions:
+            - kind: SendActivity
+              id: sendActivity_woHhRN
+              activity: |-
+                **Files received successfully!**
+                I'll now verify the file structure before starting the AI-powered analysis.
+                **Checking sheet compliance**...
+
+            - kind: InvokeFlowAction
+              id: invokeFlowAction_Z4clIs
+              displayName: Validate Excel Sheet uploaded
+              input:
+                binding:
+                  file: "={ contentBytes: Topic.uploadedFiles.Content, name: Topic.uploadedFiles.Name }"
+
+              output:
+                binding:
+                  bolbpath: Topic.bolbPath
+                  filename: Topic.fileName
+                  status: Topic.status
+
+              flowId: da21ca9b-a777-f111-ab0f-70a8a59be24e
+
+            - kind: ConditionGroup
+              id: conditionGroup_sURdBn
+              conditions:
+                - id: conditionItem_qkIWFe
+                  condition: =Topic.status = "FileReady"
+                  displayName: Files Recieved
+                  actions:
+                    - kind: InvokeFlowAction
+                      id: invokeFlowAction_o3HgoZ
+                      displayName: Handle uploaded File
+                      input:
+                        binding:
+                          file: "={ contentBytes: Topic.uploadedFiles.Content, name: Topic.uploadedFiles.Name }"
+                          text: =System.User.Id
+                          text_1: =System.User.Email
+
+                      output:
+                        binding:
+                          filepath: Topic.filePath
+                          message: Topic.message
+                          sessionid: Topic.sessionId
+                          status: Topic.status
+
+                      flowId: 158181a6-e08b-567f-74b2-7d1786594ac8
+
+                    - kind: SetVariable
+                      id: setVariable_dmD4Iw
+                      variable: Global.uploadedFilePath
+                      value: =Topic.filePath
+
+                    - kind: SetVariable
+                      id: setVariable_ZZZzE1
+                      variable: Global.sessionId
+                      value: =Topic.sessionId
+
+                    - kind: SetVariable
+                      id: setVariable_OqJ4BL
+                      variable: Global.uploadStatus
+                      value: Uploaded
+
+                    - kind: SetVariable
+                      id: setVariable_E3GR0S
+                      variable: Global.processingStatus
+                      value: Processing
+
+                    - kind: SendActivity
+                      id: sendActivity_SVAwKd
+                      displayName: Files Status
+                      activity: |-
+                        **File received:** {Topic.fileName}
+                        **Status:** {Global.processingStatus}
+
+                        _The agent model will now analyze the uploaded file content to identify which sheets are present and verify compliance._
+
+                    - kind: BeginDialog
+                      id: BLDCh7
+                      dialog: Default_azureMigrateFileHandler.topic.ProcessApplicationInventory
+
+                    - kind: SendActivity
+                      id: sendActivity_7NPV24
+                      displayName: Processing Status
+                      activity: |-
+                        **All processing complete!**
+                        Your Azure Migrate inventory has been analyzed end to end:
+                        - Application inventory analyzed and deduplicated
+                        - SQL Server instances consolidated and grouped by version
+                        - Web applications identified and consolidated
+                        - Consolidated report generated with a download link above
+
+                        Thank you for using the Azure Migrate CSV Processing agent.
+
+              elseActions:
+                - kind: ConditionGroup
+                  id: conditionGroup_8xab6x
+                  conditions:
+                    - id: conditionItem_zmymnV
+                      condition: =Topic.status <> Blank()
+                      actions:
+                        - kind: SendActivity
+                          id: sendActivity_4T7VoA
+                          displayName: Uploaded File Not ready
+                          activity: |-
+                            ❌ **File validation failed.**
+
+                            The uploaded file could not be saved for processing.
+                            Please verify:
+                            1. The storage connection is configured correctly
+                            2. The uploads container exists and is accessible
+                            3. Any credentials or SAS tokens have not expired
+
+                            Please try uploading your file again.
+
+                        - kind: BeginDialog
+                          id: BrLPtY
+                          dialog: Default_azureMigrateFileHandler.topic.WelcomeandUploadInstructions
+
+                  elseActions:
+                    - kind: SendActivity
+                      id: sendActivity_IoRBW0
+                      displayName: No Filrs to process
+                      activity: |-
+                        ⚠️ **No files detected.**
+
+                        Please try again by:
+                        1. Clicking the attachment button (📎)
+                        2. Selecting your Azure Migrate CSV or Excel file(s)
+                        3. Clicking Send
+
+                        **Supported formats:** CSV (.csv), Excel (.xlsx, .xls)
+
+                    - kind: BeginDialog
+                      id: tUoVp5
+                      dialog: Default_azureMigrateFileHandler.topic.WelcomeandUploadInstructions
+
+      elseActions:
+        - kind: SendActivity
+          id: sendActivity_wLOHiB
+          activity: |-
+            **No files detected.**
+
+            It looks like no files were uploaded. Please try again by:
+            1. Clicking the attachment/upload button
+            2. Selecting your Azure Migrate CSV or Excel file(s)
+            3. Clicking Send or Upload
+
+            **Supported formats:**
+            • CSV files (.csv)
+            • Excel files (.xlsx, .xls)
+
+            Would you like to try uploading your files again?
+
+        - kind: BeginDialog
+          id: FGAFZE
+          displayName: Start Over
+          dialog: Default_azureMigrateFileHandler.topic.WelcomeandUploadInstructions
+
+inputType: {}
+outputType: {}

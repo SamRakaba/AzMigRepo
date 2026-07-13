@@ -1,0 +1,112 @@
+kind: AdaptiveDialog
+beginDialog:
+  kind: OnRecognizedIntent
+  id: main
+  intent:
+    triggerQueries:
+      - Generate report
+      - Generate consolidated report
+      - Create the report
+      - Download my report
+      - Finish processing
+
+  actions:
+    - kind: ConditionGroup
+      id: conditionGroup_reportGuard
+      conditions:
+        - id: conditionItem_reportHasData
+          condition: =!IsBlank(Global.consolidatedApplications) || !IsBlank(Global.consolidatedSQLInstances) || !IsBlank(Global.consolidatedWebApps)
+
+      elseActions:
+        - kind: SendActivity
+          id: sendActivity_reportNoData
+          activity: |-
+            ⚠️ There is no processed inventory data to report yet. Please upload a file and let the analysis run first.
+
+            To get started, type "Start" or "Upload files".
+
+        - kind: BeginDialog
+          id: beginDialog_reportNoDataRestart
+          dialog: Default_azureMigrateFileHandler.topic.ConversationStart
+
+    - kind: SendActivity
+      id: sendActivity_reportBuilding
+      activity: 📝 Combining the consolidated application, SQL Server, and web application data into your report...
+
+    - kind: BeginDialog
+      id: beginDialog_formatReport
+      input:
+        binding:
+          applicationsJson: =Coalesce(Global.consolidatedApplications, "[]")
+          sqlJson: =Coalesce(Global.consolidatedSQLInstances, "[]")
+          webAppsJson: =Coalesce(Global.consolidatedWebApps, "[]")
+
+      dialog: Default_azureMigrateFileHandler.action.FormatConsolidatedReport
+      output:
+        binding:
+          predictionOutput: Topic.predictionOutput
+
+    - kind: ConditionGroup
+      id: conditionGroup_reportHasBody
+      conditions:
+        - id: conditionItem_reportBodyReady
+          condition: =!IsBlank(Topic.predictionOutput.text)
+          actions:
+            - kind: InvokeFlowAction
+              id: invokeFlowAction_writeReport
+              displayName: Generate Consolidated Report
+              input:
+                binding:
+                  text: =Topic.predictionOutput.text
+                  text_1: =Global.sessionId
+
+              output:
+                binding:
+                  downloadurl: Topic.downloadUrl
+                  status: Topic.status
+
+              flowId: PLACEHOLDER-REPLACE-WITH-Generate-Consolidated-Report-flowId
+
+            - kind: ConditionGroup
+              id: conditionGroup_reportLink
+              conditions:
+                - id: conditionItem_reportHasLink
+                  condition: =!IsBlank(Topic.downloadUrl)
+                  actions:
+                    - kind: SetVariable
+                      id: setVariable_downloadUrl
+                      variable: Global.downloadUrl
+                      value: =Topic.downloadUrl
+
+                    - kind: SetVariable
+                      id: setVariable_processingComplete
+                      variable: Global.processingStatus
+                      value: Complete
+
+                    - kind: SendActivity
+                      id: sendActivity_reportReady
+                      activity: |-
+                        ✅ **Your consolidated Azure Migrate report is ready!**
+
+                        📥 **Download:** {Global.downloadUrl}
+
+                        The report contains three sections — Applications, SQL Server Instances, and Web Applications — with duplicates and noise removed. The link is valid for 24 hours.
+
+              elseActions:
+                - kind: SendActivity
+                  id: sendActivity_reportNoLink
+                  activity: |-
+                    ❌ The report could not be written to storage. Please verify:
+                    1. The storage connection is configured correctly
+                    2. The `reports` container exists and is accessible
+                    3. Any credentials or SAS tokens have not expired
+
+                    Then type "Generate report" to try again.
+
+      elseActions:
+        - kind: SendActivity
+          id: sendActivity_reportNoBody
+          activity: ⚠️ The report could not be formatted because no consolidated data was available. Please re-run the inventory processing, then try again.
+
+inputType: {}
+outputType: {}

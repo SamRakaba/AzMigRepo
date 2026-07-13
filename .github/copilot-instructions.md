@@ -1,6 +1,6 @@
 # GitHub Copilot Repo Instructions — SamRakaba/AzMigRepo
 
-Effective date: 2026-07-03 (v1.3)
+Effective date: 2026-07-12 (v1.5)
 Repo: SamRakaba/AzMigRepo
 Primary focus: Implementation documentation for Azure Migrate CSV Processing agents built in Microsoft Copilot Studio
 Parent project: [SamRakaba/AZMrepo](https://github.com/SamRakaba/AZMrepo)
@@ -85,6 +85,7 @@ Key global variables: `Global.sessionId`, `Global.uploadedFilePath`, `Global.con
 
 - **Markdown**: Primary format for all documentation — clear headings, numbered steps, code blocks
 - **JSON schemas**: For PA flow contracts, variable definitions, and trigger payloads
+- **Topic YAML**: For Copilot Studio topics, author/maintain the topic as a `.yml` file under `Topics/` (see §14). Prefer generating or updating the YAML directly over click-by-click UI narration.
 - **Topic naming**: `Verb + Object` (e.g., "Welcome and Upload Instructions", "Process Application Inventory")
 - **Global variable naming**: `camelCase` (e.g., `consolidatedApplications`, `uploadedFilePath`)
 - **PA flow naming**: `Verb + Object + Context` (e.g., "Read Application Inventory Data", "Generate Consolidated Report")
@@ -165,7 +166,7 @@ All HVE Core agent outputs go to `.copilot-tracking/` which is gitignored. Never
 | `COPILOT_STUDIO_GUIDE.md` | Generic Copilot Studio portal tutorial (reference) | — |
 | `COPILOT_INSTRUCTIONS.md` | Parent repo coding conventions (reference only) | — |
 | `AGENTS.md` | Development methodology (HVE Core) + agent quick-reference + lessons learned | v1.1 |
-| `.github/copilot-instructions.md` | This file — repo-level Copilot behavior rules | v1.3 |
+| `.github/copilot-instructions.md` | This file — repo-level Copilot behavior rules | v1.5 |
 
 When referencing implementation details, cite `AZURE_MIGRATE_AGENTS_GUIDE.md` by section header (e.g., "Agent 1: File Upload Handler", "Step 5: Add Power Automate Flows as Tools"). Do not claim content exists in the guide unless it actually does.
 
@@ -217,6 +218,7 @@ The `AZURE_MIGRATE_AGENTS_GUIDE.md` was updated to v1.3 for the 2026 Copilot Stu
 | 4 | **File type in Ask a Question** | The "File" option in Identify dropdown may not be available in all environments | If missing, use Text and handle file attachment via `System.Activity.Attachments` |
 | 5 | **Power Fx formula for File inputs fails** | `{ contentBytes: Topic.uploadedFiles.Content }` → error: "The '.' operator cannot be used on Blob values" | Select the File variable directly from the picker — do NOT use Power Fx formulas for File-type inputs |
 | 6 | **Table type error** | `[{ contentBytes: ... }]` → error: "incorrect type table" | Square brackets create Table type, not File. Use direct variable selection instead |
+| 7 | **AI Builder prompt output binding** | Binding the whole `predictionOutput` record to a String variable → type mismatch | The analysis/report prompts (Agents 2–5) invoke as `InvokeAIBuilderModelAction`; in the topic bind the output key **`predictionOutput.text`** (the String) to your Global — binding `predictionOutput` (the record) fails. Read it as `Topic.predictionOutput.text`. |
 
 ### 13.2 Power Automate Pitfalls
 
@@ -241,6 +243,12 @@ The `AZURE_MIGRATE_AGENTS_GUIDE.md` was updated to v1.3 for the 2026 Copilot Stu
 | 5 | **Add condition guards in processing topics** | Each processing topic should check if `Global.uploadedFilePath` is empty before calling its PA tool. Show a helpful message redirecting to upload. |
 | 6 | **Instructions tab replaces old system prompt location** | Don't waste time looking for "Agent details → Instructions" in Settings. It's now a main-page tab. |
 | 7 | **Tools tab shows PA flows with agent triggers** | Only flows with "When an agent calls the flow" trigger appear in the Workflows list when adding tools. |
+| 8 | **Extract CSV blob to text with `base64ToString`** | `Get blob content (V2)` returns base64 in `body(...)?['$content']`. Decode to readable rows with a Compose: `base64ToString(body('Get_blob_content_V2')?['$content'])`. Never feed the raw `.xlsx` binary to the model — process the sheet as `.csv` (Path A). |
+| 9 | **Guard CSV size against the 128K-token limit** | GPT-4.1 context is 128K tokens (~350K chars input budget). In the Read flow add a `CsvLength` Compose = `length(outputs('Extract_csv_text'))`, then return `status = if(greater(outputs('CsvLength'), 350000), 'TooLarge', 'DataReady')` and blank `rawApplicationData` when too large. The processing topic checks `Topic.status = "TooLarge"` and shows trim/split guidance instead of calling the model. |
+| 10 | **Large files (60K+ rows) need chunking, not single-pass** | Single-pass ceilings: ~300–400 full-column rows, ~2,000–2,500 trimmed-column rows. For 60K+ rows, trim columns at export first, then batch the CSV (~2,000–2,500 rows/batch), analyze each batch, and run a final cross-batch dedup/merge. See guide Step 1.8. |
+| 11 | **Reuse the proven CSV+prompt pattern for every processor (Agents 2–5)** | Agents 3 (SQL), 4 (Web App) and 5 (Report) use the **same** shape as Agent 2: agent-called Read flow → `Extract csv text` (`base64ToString`) → `CsvLength` size guard → `Respond to the agent` (`raw<X>Data`/`rowCount`/`status`) → topic guard → AI Builder prompt (`predictionOutput.text`) → store `Global.consolidated<X>` → redirect to next topic. Do NOT reintroduce Excel-table `List rows`/Parse JSON reads or Excel-template report writes — both were proven to fail for Agent 2. |
+| 12 | **Agent 5 report is CSV, not Excel; chain redirects App→SQL→Web→Report** | Report Generator formats the three in-memory globals into one **sectioned CSV** via the *Format Consolidated Report* prompt, then a single agent-called flow writes it to `reports/<sessionId>/…csv` and returns a 24h SAS `downloadUrl` (`coalesce`-wrapped). No HTTP trigger, no email, no Excel template, no Azure Functions. Topics redirect in sequence; the last (Report) presents the link. |
+| 13 | **Replace PLACEHOLDER flowId GUIDs after creating flows** | Authored topic YAMLs (`Topics/Process_SQL_Server_Inventory.yaml`, `Process_Web_App_Inventory.yaml`, `Generate_Report.yaml`) use `PLACEHOLDER-…-flowId` values so they parse. After building each PA flow in Studio, replace the placeholder with the real flow GUID before pasting the topic back and testing. |
 
 ### 13.4 Development Process Lessons
 
@@ -251,3 +259,76 @@ The `AZURE_MIGRATE_AGENTS_GUIDE.md` was updated to v1.3 for the 2026 Copilot Stu
 | 3 | **Guide was written for wrong UI version** | The AZURE_MIGRATE_AGENTS_GUIDE.md was written for the 2024-2025 UI. Building interactively revealed the 2026 redesign. Guides must be validated against the actual current UI. |
 | 4 | **Interactive walkthrough discovers real UI** | Step-by-step building with the user asking "what do you see?" is the only reliable way to document the current Copilot Studio UI. |
 | 5 | **Track UI changes immediately** | Document UI discoveries in `.copilot-tracking/changes/` as they happen. This prevents losing critical mapping knowledge. |
+
+## 14) Topic YAML Authoring (Agent-Native — preferred workflow)
+
+Copilot Studio topics can be edited as YAML via the topic **code editor** (open a topic → **</> code** view). Copilot **must prefer generating or updating topic YAML directly** over narrating click-by-click UI steps, because it is faster, reviewable in git, and far less error-prone.
+
+### 14.1 Workflow
+1. Ask the user to export the topic YAML (topic → code editor → copy) into `Topics/<Topic-Name>.yml` in the repo — or update the existing file there.
+2. Make surgical edits to the YAML.
+3. **Validate it parses** before handing back (e.g., `python -c "import yaml; yaml.safe_load(open('Topics/<file>.yml',encoding='utf-8'))"`).
+4. Have the user paste the corrected YAML back into the topic code editor and **Save**.
+5. Then test in the **Test your agent** panel.
+
+### 14.2 Topic YAML essentials (observed schema)
+- Root: `kind: AdaptiveDialog` → `beginDialog: kind: OnRecognizedIntent` with `intent.triggerQueries` (trigger phrases) and `actions:`.
+- Common action `kind`s: `Question` (with `variable:` and `entity: FilePrebuiltEntity` for file uploads), `SendActivity`, `InvokeFlowAction` (Power Automate tool call), `ConditionGroup` (with `conditions[].condition` Power Fx + `elseActions`), `SetVariable`, `BeginDialog` (topic redirect).
+- `InvokeFlowAction` has `input.binding` (map tool inputs) and `output.binding` (capture tool outputs to `Topic.*`), plus `flowId`.
+- Global variables are referenced as `Global.<name>`; topic-scoped as `Topic.<name>`.
+
+### 14.3 Hard rules for topic YAML (from lessons — see §13)
+- **File input mapping:** a PA flow File input surfaces as a Record; map it with `={contentBytes: Topic.uploadedFiles, name: "upload.xlsx"}` where `uploadedFiles` is a plain File var (Ask-a-question File response, **"Include file metadata" OFF**). Never use `First(System.Activity.Attachments)` (empty after the question turn) and never `.Content` on a Blob.
+- **Guard order:** call a flow tool **inside** the "files uploaded" (`=!IsBlank(Topic.uploadedFiles)`) branch, never before the guard.
+- **Every branch responds:** each `ConditionGroup` branch that ends the flow must send an appropriate message / redirect; every PA `Respond to the agent` must return all outputs non-null.
+- **Redirect ordering:** set globals **before** `BeginDialog` redirects; don't emit "complete" messages before the work runs.
+- Always validate the YAML parses before returning it.
+
+## 15) Azure MCP Server & Copilot Skills (analysis/implementation tooling — NOT part of the solution)
+
+Copilot working in this repo has access to the **Azure MCP server** and a set of **Azure-focused Copilot skills**. Use them to *analyze, verify, and implement* the documentation in this repo — they are development/authoring tools, **not** components of the shipped solution.
+
+### 15.1 Hard boundary — tooling vs. solution
+- The **solution architecture is unchanged**: GPT-4.1-first intelligence in Copilot Studio + Power Automate for file I/O only. See §3 and §5.5–5.6.
+- Azure MCP tools and Azure skills are **for Copilot's own use** when researching Azure behavior, validating example values against a real environment, checking RBAC/storage config, or grounding documentation in fact.
+- **Never** introduce Azure MCP calls, Azure CLI scripts, Azure Functions, or custom compute into the documented agent design, topic YAML, or Power Automate flows. Doing so violates the GPT-4.1-first principle (§5.5).
+- **Never** paste real subscription IDs, resource names, connection strings, or secrets discovered via these tools into the repo. All example values stay labeled **PLACEHOLDER — replace this** / **EXAMPLE only** (§2.2).
+
+### 15.2 When to use Azure MCP / Azure skills
+Use them during **Research** and **Review** (HVE RPI, §9) — e.g. to:
+- Verify Azure Migrate export schemas, product behavior, and current API/UI facts (avoids fabrication, §2.1).
+- Confirm Blob Storage, container, RBAC ("Storage Blob Data Contributor"), and Entra ID (Service Principal) setup that the PA flows depend on (§6, §13.2).
+- Ground best-practice guidance (Well-Architected, security) before writing it into a guide.
+
+### 15.3 Relevant Azure MCP tool groups
+The Azure MCP server exposes tools prefixed `azure-`. The most relevant for this repo:
+
+| Tool group | Use it to (analysis/implementation only) |
+|------------|------------------------------------------|
+| `azure-documentation` | **Primary grounding tool** — search official Microsoft Learn docs (incl. Azure Migrate export schemas) to cite facts instead of fabricating (§2.1) |
+| `azure-storage` | Inspect Blob containers/paths and storage-account config the PA flows read/write |
+| `azure-role` | Confirm RBAC roles (e.g. Storage Blob Data Contributor) for the flow connections |
+| `azure-keyvault` | Check secret/SAS handling patterns (never surface secret values into docs) |
+| `azure-group_list`, `azure-group_resource_list`, `azure-subscription_list` | Discover resources when validating an environment |
+| `azure-foundry` | Verify GPT-4.1 model availability/config facts |
+| `azure-monitor`, `azure-applicationinsights` | Ground flow-diagnostics / log-location guidance (§11) |
+| `azure-get_azure_bestpractices`, `azure-wellarchitectedframework` | Ground security/reliability recommendations before documenting them |
+
+> Azure MCP tools are **deferred** — call the tool-search tool first to load a tool's schema before invoking it. Never guess a deferred tool's signature.
+
+### 15.4 Relevant Azure Copilot skills
+The following Copilot skills help analyze/implement this repo (invoke by name; they do not become part of the solution):
+
+| Skill | Use for |
+|-------|---------|
+| `azure-storage` | Blob/container concepts, access tiers, storage I/O patterns the flows use |
+| `azure-rbac` | Least-privilege role selection + assignment code for flow identities |
+| `azure-resource-lookup` | Inventory/find storage accounts and related resources |
+| `azure-diagnostics` | Troubleshoot deployed Azure resources referenced by the flows |
+| `azure-compliance` | Security/compliance and Key Vault expiration checks on the Azure side |
+
+### 15.5 Rules
+1. Read-only / analysis first — prefer `list`/`get`/best-practice tools; never mutate a real environment without explicit user confirmation.
+2. Keep findings out of the shipped artifacts except as **PLACEHOLDER**/**EXAMPLE** values.
+3. Record verified facts (schemas, RBAC, UI) in `.copilot-tracking/` (gitignored, §9), not in committed docs unless they belong in the guide.
+4. If a tool would change the documented **solution** design, stop — that's out of scope (§15.1).
